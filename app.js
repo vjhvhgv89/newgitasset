@@ -29,8 +29,9 @@
     measurementId: "G-TKR89Q3PWE"
   };
 
-  // Initialize Firebase Cloud Firestore
+  // Initialize Firebase Cloud Firestore + Storage
   let db = null;
+  let storage = null;
   let isFirebaseReady = false;
 
   try {
@@ -39,8 +40,9 @@
         firebase.initializeApp(firebaseConfig);
       }
       db = firebase.firestore();
+      storage = firebase.storage();
       isFirebaseReady = true;
-      console.log('Firebase Cloud Firestore Initialized Successfully');
+      console.log('Firebase Cloud Firestore + Storage Initialized Successfully');
     }
   } catch (err) {
     console.warn('Firebase init error, fallback to local storage:', err);
@@ -89,7 +91,7 @@
       isAuthenticated: false,
       role: 'admin',
       store: null,
-      username: 'admin@assetflow.com',
+      username: 'admin',
       displayName: 'Admin (Headquarters)'
     },
     authTab: 'store',
@@ -259,6 +261,13 @@
     });
   }
 
+  function removeTaskFromCloud(taskId) {
+    if (!isFirebaseReady || !db) return;
+    db.collection('tasks').doc(taskId).delete().catch(err => {
+      console.warn('Error deleting task from Firebase:', err);
+    });
+  }
+
   function syncMetadataToCloud() {
     if (!isFirebaseReady || !db) return;
     db.collection('settings').doc('metadata').set({
@@ -299,7 +308,16 @@
         }
         cloudTasks.push(t);
       });
+
       state.tasks = cloudTasks;
+      state.tasks.forEach(t => {
+        if (t.proofImage && t.comments && t.comments.length) {
+          const verifComment = [...t.comments].reverse().find(c => c.isVerification);
+          if (verifComment && !verifComment.proofImage) {
+            verifComment.proofImage = t.proofImage;
+          }
+        }
+      });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
       render();
     }, err => {
@@ -386,6 +404,12 @@
     state.tasks.forEach(t => {
       if (t.status !== 'Completed') {
         t.status = calculateTaskStatus(t);
+      }
+      if (t.proofImage && t.comments && t.comments.length) {
+        const verifComment = [...t.comments].reverse().find(c => c.isVerification);
+        if (verifComment && !verifComment.proofImage) {
+          verifComment.proofImage = t.proofImage;
+        }
       }
     });
   }
@@ -544,7 +568,10 @@
     drawerInstructionsBox: document.getElementById('drawer-instructions-box'),
     drawerInstructionsText: document.getElementById('drawer-instructions-text'),
     drawerProofBox: document.getElementById('drawer-proof-box'),
+    drawerProofTitle: document.getElementById('drawer-proof-title'),
     drawerProofImg: document.getElementById('drawer-proof-img'),
+    drawerGalleryContainer: document.getElementById('drawer-gallery-container'),
+    drawerGalleryStrip: document.getElementById('drawer-gallery-strip'),
     commentsCount: document.getElementById('comments-count'),
     commentsList: document.getElementById('comments-list'),
     commentForm: document.getElementById('comment-form'),
@@ -903,12 +930,16 @@
       const isComplete = status === 'Completed';
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
-      const hasProof = Boolean(task.proofImage);
+      
+      const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => c.proofImage)));
+      const latestProof = task.proofImage || (task.comments && [...task.comments].reverse().find(c => c.proofImage)?.proofImage);
 
       // Compute Next Maintenance Cycle indicator from specific scheduled date or cycle calculation
       let nextCycleMarkup = '';
       const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-      if (nextCycleDate && task.cycle !== 'One-Time Inspection') {
+      const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
+
+      if (hasNextCycle) {
         const nextStatus = calculateDateStatus(nextCycleDate);
         const nextMeta = getStatusMeta(nextStatus);
         nextCycleMarkup = `
@@ -919,10 +950,17 @@
               </svg>
               Next ${escapeHTML(task.cycle)}: <strong>${formatDateDisplay(nextCycleDate)}</strong>
             </span>
-            <span class="status-chip ${nextMeta.className}" style="font-size: 10.5px; padding: 2px 7px;">
-              <span class="status-dot ${nextMeta.dotClass}"></span>
-              ${nextMeta.label}
-            </span>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span class="status-chip ${nextMeta.className}" style="font-size: 10.5px; padding: 2px 7px;">
+                <span class="status-dot ${nextMeta.dotClass}"></span>
+                ${nextMeta.label}
+              </span>
+              ${isComplete && !isAdmin() ? `
+                <button type="button" class="btn-start-early-pill" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start upcoming maintenance cycle early">
+                  ⚡ Start Early
+                </button>
+              ` : ''}
+            </div>
           </div>
         `;
       }
@@ -968,8 +1006,8 @@
             </div>
 
             ${hasProof ? `
-              <div class="proof-thumbnail-badge" onclick="window.assetApp.openLightbox('${task.proofImage}', '${escapeHTML(task.assetName)} — Completion Proof')">
-                <img src="${task.proofImage}" alt="Proof" class="proof-thumbnail-mini">
+              <div class="proof-thumbnail-badge" onclick="window.assetApp.openLightbox('${latestProof}', '${escapeHTML(task.assetName)} — Completion Proof')">
+                <img src="${latestProof}" alt="Proof" class="proof-thumbnail-mini">
                 <span>Verified Photo Proof Attached</span>
               </div>
             ` : ''}
@@ -991,8 +1029,24 @@
               ${isComplete ? `
                 ${isAdmin() ? `
                   <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task (Admin only)">
-                    Reopen Task
+                    Reopen
                   </button>
+                ` : ''}
+
+                ${hasNextCycle && !isAdmin() ? `
+                  <button class="btn btn-primary btn-sm btn-start-cycle" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start next maintenance cycle early">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                    <span>Start Next Cycle</span>
+                  </button>
+                ` : isAdmin() ? `
+                  <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    ✓ Completed
+                  </span>
                 ` : `
                   <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1001,14 +1055,14 @@
                     Done (${formatDateDisplay(task.completedAt)})
                   </span>
                 `}
-              ` : `
+              ` : !isAdmin() ? `
                 <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Specify completion date, photo proof & remarks">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                   <span>Mark Done</span>
                 </button>
-              `}
+              ` : ''}
 
               ${isAdmin() ? `
                 <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task details (Admin only)">
@@ -1017,6 +1071,16 @@
                     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
                   </svg>
                   <span>Edit</span>
+                </button>
+                <button class="btn btn-danger btn-sm" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete this asset permanently (Admin only)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6"></path>
+                    <path d="M14 11v6"></path>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                  </svg>
+                  <span>Delete</span>
                 </button>
               ` : ''}
             </div>
@@ -1039,16 +1103,23 @@
       const isComplete = status === 'Completed';
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
-      const hasProof = Boolean(task.proofImage);
+      const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => c.proofImage)));
+      const latestProof = task.proofImage || (task.comments && [...task.comments].reverse().find(c => c.proofImage)?.proofImage);
 
       const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+      const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
       let nextCycleCell = '—';
-      if (nextCycleDate && task.cycle !== 'One-Time Inspection') {
+      if (hasNextCycle) {
         const nextStatus = calculateDateStatus(nextCycleDate);
         const nextMeta = getStatusMeta(nextStatus);
         nextCycleCell = `
           <div><small>${formatDateDisplay(nextCycleDate)}</small></div>
-          <span class="status-chip ${nextMeta.className}" style="font-size: 10px; padding: 1px 6px;">${nextMeta.label}</span>
+          <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
+            <span class="status-chip ${nextMeta.className}" style="font-size: 10px; padding: 1px 6px;">${nextMeta.label}</span>
+            ${isComplete && !isAdmin() ? `
+              <button type="button" class="btn-start-early-pill" onclick="window.assetApp.startNextCycleEarly('${task.id}')" style="font-size: 9.5px; padding: 1px 5px;" title="Start upcoming cycle early">⚡ Start</button>
+            ` : ''}
+          </div>
         `;
       }
 
@@ -1078,7 +1149,7 @@
           </td>
           <td>
             ${hasProof ? `
-              <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openLightbox('${task.proofImage}', '${escapeHTML(task.assetName)} — Proof')" title="View photo proof">
+              <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openLightbox('${latestProof}', '${escapeHTML(task.assetName)} — Proof')" title="View photo proof">
                 📷 View
               </button>
             ` : `<span style="color: var(--text-subtle);">—</span>`}
@@ -1096,16 +1167,30 @@
               ${isComplete ? `
                 ${isAdmin() ? `
                   <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task">Reopen</button>
+                ` : ''}
+                ${hasNextCycle && !isAdmin() ? `
+                  <button class="btn btn-primary btn-sm btn-start-cycle" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start next maintenance cycle early">
+                    ⚡ Start Next Cycle
+                  </button>
                 ` : `
                   <span style="color: #059669; font-size: 11.5px; font-weight: 700;">✓ ${formatDateDisplay(task.completedAt)}</span>
                 `}
-              ` : `
+              ` : !isAdmin() ? `
                 <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')">
                   Done
                 </button>
-              `}
+              ` : ''}
               ${isAdmin() ? `
                 <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task (Admin only)">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete asset permanently (Admin only)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6"></path><path d="M14 11v6"></path>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                  </svg>
+                  Delete
+                </button>
               ` : ''}
             </div>
           </td>
@@ -1153,7 +1238,7 @@
         isAuthenticated: true,
         role: 'admin',
         store: null,
-        username: 'admin@assetflow.com',
+        username: 'admin',
         displayName: 'Admin (Headquarters)'
       };
       state.filterStore = 'all';
@@ -1287,6 +1372,21 @@
     }
   }
 
+  function deleteTask(taskId) {
+    if (!isAdmin()) return;
+    const idx = state.tasks.findIndex(t => t.id === taskId);
+    if (idx === -1) return;
+    const task = state.tasks[idx];
+
+    if (confirm(`Permanently delete asset "${task.assetName}" from store "${task.store}"?\n\nThis action cannot be undone and will remove all maintenance history for this asset.`)) {
+      state.tasks.splice(idx, 1);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+      removeTaskFromCloud(taskId);
+      render();
+      showToast(`Asset "${task.assetName}" deleted.`);
+    }
+  }
+
   function handleAddStoreSubmit(e) {
     e.preventDefault();
     if (!isAdmin()) return;
@@ -1367,6 +1467,68 @@
     openCompletionModal(task);
   }
 
+  // Start Next Recurring Maintenance Cycle Early (Store & Admin)
+  function startNextCycleEarly(taskId) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.completedAt || task.dueDate || TODAY_STR, task.cycle);
+    if (!nextCycleDate || task.cycle === 'One-Time Inspection') {
+      alert('This task has no recurring maintenance cycle scheduled.');
+      return;
+    }
+
+    const cycleName = task.cycle || 'Maintenance';
+    const formattedDate = formatDateDisplay(nextCycleDate);
+
+    const proceed = confirm(
+      `Start the upcoming ${cycleName} cycle early for "${task.assetName}"?\n\n` +
+      `• Scheduled Due Date: ${formattedDate}\n` +
+      `• Assigned Store: ${task.store}\n\n` +
+      `This will activate the new cycle so your store can perform maintenance and submit verification now.`
+    );
+
+    if (!proceed) return;
+
+    const previousCompletedDate = task.completedAt || TODAY_STR;
+
+    // 1. Advance task due date to the scheduled next cycle date
+    task.dueDate = nextCycleDate;
+    task.completedAt = null;
+    task.completedTimestamp = null;
+    task.completedBy = null;
+    task.completionRemarks = null;
+
+    // 2. Compute the subsequent next cycle due date after this one
+    task.nextCycleDueDate = calculateNextCycleDate(nextCycleDate, task.cycle);
+
+    // 3. Recalculate status for the new cycle
+    task.status = calculateTaskStatus(task);
+
+    // 4. Log activity remark
+    task.comments = task.comments || [];
+    task.comments.push({
+      id: 'c-' + Date.now(),
+      author: getCurrentUserLabel(),
+      role: isAdmin() ? 'admin' : 'store',
+      text: `🚀 Started next ${task.cycle} cycle early (Due: ${formattedDate}) by ${getCurrentUserLabel()}.\n(Previous cycle was completed on ${formatDateDisplay(previousCompletedDate)}).`,
+      timestamp: new Date().toISOString()
+    });
+
+    saveState();
+    syncTaskToCloud(task);
+    render();
+
+    showToast(`Started next ${cycleName} cycle (Due: ${formattedDate})! Submit verification when ready.`);
+
+    // Open completion modal right away so the store can complete & verify immediately if they wish
+    openCompletionModal(task);
+
+    if (state.activeDrawerTaskId === taskId) {
+      openCommentsDrawer(taskId);
+    }
+  }
+
   function openCompletionModal(task) {
     state.completingTaskId = task.id;
     state.completionAttachedImageData = null;
@@ -1403,18 +1565,61 @@
     state.completionAttachedImageData = null;
   }
 
-  function handleImageFileUpload(file) {
+  function compressImage(file, maxDimension = 900, quality = 0.72) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDimension) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            }
+          } else {
+            if (height > maxDimension) {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = () => resolve(e.target.result);
+        img.src = e.target.result;
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleImageFileUpload(file) {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       alert('Please upload an image file (PNG, JPEG, WebP).');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      setAttachedCompletionImage(e.target.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImage(file);
+      if (compressedDataUrl) {
+        setAttachedCompletionImage(compressedDataUrl);
+      }
+    } catch (err) {
+      console.warn('Compression note:', err);
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        setAttachedCompletionImage(e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
   function setAttachedCompletionImage(dataUrl) {
@@ -1460,12 +1665,13 @@
     }
 
     if (!state.completionAttachedImageData) {
-      alert('Proof image is required before completing this task. Please attach or drop an image, or click a sample photo button.');
+      alert('Proof image is required before completing this task. Please attach or drop an image.');
       return;
     }
 
     const condition = el.completionConditionSelect.value;
     const nowIso = new Date().toISOString();
+    const proofUrl = state.completionAttachedImageData;
 
     // 1. Mark task completed with chosen completion date
     task.status = 'Completed';
@@ -1474,10 +1680,13 @@
     task.completedBy = getCurrentUserLabel();
     task.condition = condition;
     task.completionRemarks = remarks;
-    task.proofImage = state.completionAttachedImageData;
+    task.proofImage = proofUrl;
 
-    // 2. Compute Next Maintenance Cycle due date and its color status from completion date
-    const nextDate = task.nextCycleDueDate || calculateNextCycleDate(completionDate, task.cycle);
+    // 2. Compute Next Maintenance Cycle due date and its color status
+    let nextDate = task.nextCycleDueDate;
+    if (!nextDate || nextDate <= completionDate) {
+      nextDate = calculateNextCycleDate(task.dueDate || completionDate, task.cycle);
+    }
     let nextStatusText = '';
     if (nextDate && task.cycle !== 'One-Time Inspection') {
       task.nextCycleDueDate = nextDate;
@@ -1486,13 +1695,15 @@
       nextStatusText = `\nNext ${task.cycle} Maintenance Scheduled: ${formatDateDisplay(nextDate)} (${nextMeta.label})`;
     }
 
-    // 3. Log comment into history
+    // 3. Log comment into history with permanent proof image URL
     task.comments = task.comments || [];
     task.comments.push({
       id: 'c-' + Date.now(),
       author: getCurrentUserLabel(),
       role: isAdmin() ? 'admin' : 'store',
-      text: `✅ Task Completed on ${formatDateDisplay(completionDate)} & Verified\nRemarks: ${remarks}${nextStatusText}\n[Photo Evidence Attached]`,
+      text: `✅ Task Completed on ${formatDateDisplay(completionDate)} & Verified\nRemarks: ${remarks}${nextStatusText}`,
+      proofImage: proofUrl,
+      completionDate: completionDate,
       timestamp: nowIso,
       isVerification: true
     });
@@ -1659,7 +1870,7 @@
     hideCustomConditionInput();
   }
 
-  // Open Comments Drawer
+  // Open Comments Drawer with Photo History Gallery
   function openCommentsDrawer(taskId) {
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -1684,9 +1895,47 @@
       el.drawerInstructionsBox.classList.add('hidden');
     }
 
-    if (task.proofImage) {
-      el.drawerProofImg.src = task.proofImage;
+    // Collect all historical verified photos from comments and task.proofImage
+    const allPhotos = [];
+    if (task.comments && task.comments.length) {
+      task.comments.forEach(c => {
+        if (c.proofImage) {
+          allPhotos.push({
+            src: c.proofImage,
+            date: c.completionDate || c.timestamp,
+            author: c.author
+          });
+        }
+      });
+    }
+    if (task.proofImage && !allPhotos.some(p => p.src === task.proofImage)) {
+      allPhotos.unshift({
+        src: task.proofImage,
+        date: task.completedAt || task.completedTimestamp || 'Latest',
+        author: task.completedBy || 'Store'
+      });
+    }
+
+    if (allPhotos.length > 0) {
+      const latestPhoto = allPhotos[allPhotos.length - 1];
+      el.drawerProofImg.src = latestPhoto.src;
+      el.drawerProofImg.onclick = () => window.assetApp.openLightbox(latestPhoto.src, `${task.assetName} — Maintenance Photo (${formatDateDisplay(latestPhoto.date)})`);
+      if (el.drawerProofTitle) {
+        el.drawerProofTitle.textContent = `Verified Maintenance Photo (${formatDateDisplay(latestPhoto.date)})`;
+      }
       el.drawerProofBox.classList.remove('hidden');
+
+      // If multiple cycles have photos, show the historical thumbnail gallery
+      if (allPhotos.length > 1 && el.drawerGalleryContainer && el.drawerGalleryStrip) {
+        el.drawerGalleryStrip.innerHTML = allPhotos.map((p, idx) => `
+          <div class="gallery-thumb-item ${idx === allPhotos.length - 1 ? 'active' : ''}" title="Cycle photo: ${formatDateDisplay(p.date)}" onclick="window.assetApp.selectDrawerPhoto('${task.id}', ${idx})">
+            <img src="${p.src}" alt="Proof ${idx + 1}" class="gallery-thumb-img">
+          </div>
+        `).join('');
+        el.drawerGalleryContainer.classList.remove('hidden');
+      } else if (el.drawerGalleryContainer) {
+        el.drawerGalleryContainer.classList.add('hidden');
+      }
     } else {
       el.drawerProofBox.classList.add('hidden');
     }
@@ -1700,6 +1949,48 @@
       el.commentsDrawer.setAttribute('aria-hidden', 'false');
     }, 10);
     el.commentInput.value = '';
+  }
+
+  function selectDrawerPhoto(taskId, photoIndex) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const allPhotos = [];
+    if (task.comments && task.comments.length) {
+      task.comments.forEach(c => {
+        if (c.proofImage) {
+          allPhotos.push({
+            src: c.proofImage,
+            date: c.completionDate || c.timestamp,
+            author: c.author
+          });
+        }
+      });
+    }
+    if (task.proofImage && !allPhotos.some(p => p.src === task.proofImage)) {
+      allPhotos.unshift({
+        src: task.proofImage,
+        date: task.completedAt || task.completedTimestamp || 'Latest',
+        author: task.completedBy || 'Store'
+      });
+    }
+
+    if (allPhotos[photoIndex]) {
+      const selected = allPhotos[photoIndex];
+      el.drawerProofImg.src = selected.src;
+      el.drawerProofImg.onclick = () => window.assetApp.openLightbox(selected.src, `${task.assetName} — Maintenance Photo (${formatDateDisplay(selected.date)})`);
+      if (el.drawerProofTitle) {
+        el.drawerProofTitle.textContent = `Verified Maintenance Photo (${formatDateDisplay(selected.date)})`;
+      }
+      
+      if (el.drawerGalleryStrip) {
+        const thumbItems = el.drawerGalleryStrip.querySelectorAll('.gallery-thumb-item');
+        thumbItems.forEach((t, i) => {
+          if (i === photoIndex) t.classList.add('active');
+          else t.classList.remove('active');
+        });
+      }
+    }
   }
 
   function closeCommentsDrawer() {
@@ -1723,7 +2014,7 @@
     el.commentsList.innerHTML = comments.map(c => {
       const isRoleAdmin = c.role === 'admin';
       return `
-        <div class="comment-card">
+        <div class="comment-card ${c.isVerification ? 'verified-entry' : ''}">
           <div class="comment-header">
             <span class="comment-author">
               ${escapeHTML(c.author)}
@@ -1734,6 +2025,22 @@
             <span class="comment-time">${formatTimeDisplay(c.timestamp)}</span>
           </div>
           <p class="comment-message">${escapeHTML(c.text)}</p>
+          ${c.proofImage ? `
+            <div class="comment-proof-attachment" onclick="window.assetApp.openLightbox('${c.proofImage}', '${escapeHTML(task.assetName)} — Verified Photo Proof (${formatDateDisplay(c.completionDate || c.timestamp)})')">
+              <img src="${c.proofImage}" alt="Verified Photo Proof" class="comment-proof-thumb">
+              <div class="comment-proof-info">
+                <span class="comment-proof-title">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                  </svg>
+                  Verified Maintenance Photo
+                </span>
+                <span class="comment-proof-date">Completed: ${formatDateDisplay(c.completionDate || c.timestamp)} &bull; Click to enlarge</span>
+              </div>
+            </div>
+          ` : ''}
         </div>
       `;
     }).join('');
@@ -1942,18 +2249,28 @@
       el.loginErrorMsg.classList.add('hidden');
 
       if (state.authTab === 'admin') {
-        const user = (el.loginAdminUser.value || '').trim() || 'admin@assetflow.com';
+        const user = (el.loginAdminUser.value || '').trim();
         const pass = (el.loginAdminPassword.value || '').trim();
 
+        if (!user) {
+          el.loginErrorMsg.textContent = 'Please enter admin username.';
+          el.loginErrorMsg.classList.remove('hidden');
+          el.loginAdminUser.focus();
+          return;
+        }
+
         if (!pass) {
-          el.loginErrorMsg.textContent = 'Please enter admin password (default: admin123).';
+          el.loginErrorMsg.textContent = 'Please enter admin password.';
           el.loginErrorMsg.classList.remove('hidden');
           el.loginAdminPassword.focus();
           return;
         }
 
-        if (pass !== 'admin123' && pass !== 'admin') {
-          el.loginErrorMsg.textContent = 'Incorrect admin password (default: admin123).';
+        const validUser = (user.toLowerCase() === 'admin' || user.toLowerCase() === 'admin@assetflow.com');
+        const validPass = (pass === 'admin010211');
+
+        if (!validUser || !validPass) {
+          el.loginErrorMsg.textContent = 'Incorrect admin username or password.';
           el.loginErrorMsg.classList.remove('hidden');
           return;
         }
@@ -2281,11 +2598,14 @@
   window.assetApp = {
     openEditModal: openTaskModal,
     openComments: openCommentsDrawer,
+    selectDrawerPhoto: selectDrawerPhoto,
     triggerTaskCompletion: triggerTaskCompletion,
+    startNextCycleEarly: startNextCycleEarly,
     useSamplePhoto: useSamplePhoto,
     openLightbox: openLightbox,
     updateStorePin: updateStorePin,
     deleteStoreAccount: deleteStoreAccount,
+    deleteTask: deleteTask,
     addCustomCategory: addCustomCategory,
     addCustomCondition: addCustomCondition
   };

@@ -63,12 +63,11 @@
         <div id="admin-login-fields" class="auth-field-group hidden">
           <div class="form-field">
             <label for="login-admin-user" class="field-label">Admin Email / Username <span class="required-star">*</span></label>
-            <input type="text" id="login-admin-user" class="input-text" placeholder="admin@assetflow.com" value="admin@assetflow.com" autocomplete="username">
+            <input type="text" id="login-admin-user" class="input-text" placeholder="admin" value="admin" autocomplete="username">
           </div>
           <div class="form-field">
             <label for="login-admin-password" class="field-label">Admin Password <span class="required-star">*</span></label>
-            <input type="password" id="login-admin-password" class="input-text" placeholder="Enter password (default: admin123)" autocomplete="current-password">
-            <span class="field-hint">Credentials: <strong>admin@assetflow.com</strong> &bull; Password: <strong>admin123</strong></span>
+            <input type="password" id="login-admin-password" class="input-text" placeholder="Enter admin password" autocomplete="current-password">
           </div>
         </div>
 
@@ -603,21 +602,6 @@
                 </div>
               </div>
 
-              <!-- Quick Demo Photo Buttons -->
-              <div class="sample-photos-row">
-                <span class="sample-photos-label">Or use sample photo preset:</span>
-                <div class="sample-buttons-group">
-                  <button type="button" class="btn-sample-photo" onclick="window.assetApp.useSamplePhoto('oven')">
-                    🍕 Oven Serviced
-                  </button>
-                  <button type="button" class="btn-sample-photo" onclick="window.assetApp.useSamplePhoto('clean')">
-                    ✨ Clean Filter / Sanitized
-                  </button>
-                  <button type="button" class="btn-sample-photo" onclick="window.assetApp.useSamplePhoto('tech')">
-                    🖥️ POS / Electronics Tested
-                  </button>
-                </div>
-              </div>
             </div>
 
             <!-- Asset Condition After Maintenance -->
@@ -838,10 +822,14 @@
                 <circle cx="8.5" cy="8.5" r="1.5"></circle>
                 <polyline points="21 15 16 10 5 21"></polyline>
               </svg>
-              <span>Verified Maintenance Photo</span>
+              <span id="drawer-proof-title">Verified Maintenance Photo</span>
             </div>
             <div class="proof-img-wrapper" id="drawer-proof-img-container">
               <img id="drawer-proof-img" src="" alt="Completion photo proof" class="drawer-proof-thumbnail" onclick="window.assetApp.openLightbox(this.src, 'Completion Proof Photo')">
+            </div>
+            <div id="drawer-gallery-container" class="drawer-gallery-container hidden">
+              <div class="gallery-label">Maintenance Photo History:</div>
+              <div id="drawer-gallery-strip" class="drawer-photo-gallery"></div>
             </div>
           </div>
 
