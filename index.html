@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AssetFlow — Minimalist Asset & Task Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <!-- Authentication / Login Screen View -->
+  <div id="auth-view" class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="logo-icon-lg">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+        </div>
+        <h1 class="auth-title">AssetFlow</h1>
+        <p class="auth-subtitle">Minimalist Asset & Maintenance Management</p>
+      </div>
+
+      <!-- Login Account Type Tabs -->
+      <div class="auth-tabs">
+        <button type="button" id="tab-store-login" class="auth-tab active" data-auth-type="store">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+          <span>Store Login</span>
+        </button>
+        <button type="button" id="tab-admin-login" class="auth-tab" data-auth-type="admin">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5z"></path>
+          </svg>
+          <span>Admin Login</span>
+        </button>
+      </div>
+
+      <!-- Login Form with novalidate to prevent browser blocking on hidden tabs -->
+      <form id="login-form" class="auth-form" novalidate>
+        <!-- Store Login Fields -->
+        <div id="store-login-fields" class="auth-field-group">
+          <div class="form-field">
+            <label for="login-store-select" class="field-label">Select Store Branch <span class="required-star">*</span></label>
+            <select id="login-store-select" class="input-select">
+              <!-- Dynamically populated from store database -->
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="login-store-pin" class="field-label">Store Access PIN <span class="required-star">*</span></label>
+            <input type="password" id="login-store-pin" class="input-text" placeholder="Enter store PIN (e.g. 1234)" autocomplete="current-password">
+            <span class="field-hint">Configured and managed by your Administrator.</span>
+          </div>
+        </div>
+
+        <!-- Admin Login Fields -->
+        <div id="admin-login-fields" class="auth-field-group hidden">
+          <div class="form-field">
+            <label for="login-admin-user" class="field-label">Admin Email / Username <span class="required-star">*</span></label>
+            <input type="text" id="login-admin-user" class="input-text" placeholder="admin@assetflow.com" value="admin@assetflow.com" autocomplete="username">
+          </div>
+          <div class="form-field">
+            <label for="login-admin-password" class="field-label">Admin Password <span class="required-star">*</span></label>
+            <input type="password" id="login-admin-password" class="input-text" placeholder="Enter password (default: admin123)" autocomplete="current-password">
+            <span class="field-hint">Credentials: <strong>admin@assetflow.com</strong> &bull; Password: <strong>admin123</strong></span>
+          </div>
+        </div>
+
+        <div id="login-error-msg" class="auth-error-banner hidden"></div>
+
+        <button type="submit" class="btn btn-primary auth-submit-btn" id="btn-login-submit">
+          <span>Sign In</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Application Container with Sidebar Layout -->
+  <div id="app" class="app-layout hidden">
+    
+    <!-- Mobile Top Header Bar with Hamburger Menu Toggle -->
+    <header class="mobile-top-bar">
+      <button type="button" id="btn-toggle-sidebar" class="btn-hamburger" aria-label="Toggle Sidebar Menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      
+      <div class="mobile-brand">
+        <div class="logo-icon-sm">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+          </svg>
+        </div>
+        <span class="brand-title">AssetFlow</span>
+      </div>
+
+      <div class="mobile-header-user">
+        <span class="role-indicator-dot" id="mobile-role-dot"></span>
+      </div>
+    </header>
+
+    <!-- Sidebar Mobile Backdrop -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+    <!-- Left Sidebar Component -->
+    <aside id="sidebar" class="sidebar">
+      <!-- Sidebar Header / Brand -->
+      <div class="sidebar-header">
+        <div class="nav-brand">
+          <div class="logo-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <div>
+            <span class="brand-title">AssetFlow</span>
+            <span class="brand-subtitle">Asset & Task Operations</span>
+          </div>
+        </div>
+        <button type="button" id="btn-close-sidebar" class="btn-close-sidebar" aria-label="Close sidebar">&times;</button>
+      </div>
+
+      <!-- Active User Profile Card -->
+      <div class="sidebar-user-card">
+        <span class="role-indicator-dot" id="role-dot"></span>
+        <div class="profile-meta">
+          <span class="profile-name" id="user-display-name">Admin (Headquarters)</span>
+          <span class="profile-role" id="user-role-label">System Administrator</span>
+        </div>
+      </div>
+
+      <!-- Quick Switch Store Dropdown (Admin only) -->
+      <div class="sidebar-section" id="admin-store-switcher-wrapper">
+        <label for="admin-store-quick-switch" class="sidebar-section-label">Store Scope</label>
+        <select id="admin-store-quick-switch" class="sidebar-select" aria-label="Switch Store Scope">
+          <option value="all">All Stores (Global)</option>
+          <!-- Dynamically populated -->
+        </select>
+      </div>
+
+      <!-- Sidebar Navigation Links -->
+      <nav class="sidebar-nav">
+        <div class="sidebar-nav-group">
+          <span class="sidebar-section-label">Task Status</span>
+          
+          <button type="button" class="sidebar-link active" data-sidebar-filter="all">
+            <span class="sidebar-link-left">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+              <span>All Tasks</span>
+            </span>
+            <span class="sidebar-badge" id="side-count-all">0</span>
+          </button>
+
+          <button type="button" class="sidebar-link" data-sidebar-filter="overdue">
+            <span class="sidebar-link-left">
+              <span class="status-dot dot-overdue"></span>
+              <span>Overdue</span>
+            </span>
+            <span class="sidebar-badge badge-overdue" id="side-count-overdue">0</span>
+          </button>
+
+          <button type="button" class="sidebar-link" data-sidebar-filter="due-today">
+            <span class="sidebar-link-left">
+              <span class="status-dot dot-due-today"></span>
+              <span>Due Today</span>
+            </span>
+            <span class="sidebar-badge badge-due-today" id="side-count-due-today">0</span>
+          </button>
+
+          <button type="button" class="sidebar-link" data-sidebar-filter="due-soon">
+            <span class="sidebar-link-left">
+              <span class="status-dot dot-due-soon"></span>
+              <span>Due Soon</span>
+            </span>
+            <span class="sidebar-badge badge-due-soon" id="side-count-due-soon">0</span>
+          </button>
+
+          <button type="button" class="sidebar-link" data-sidebar-filter="upcoming">
+            <span class="sidebar-link-left">
+              <span class="status-dot dot-upcoming"></span>
+              <span>Upcoming</span>
+            </span>
+            <span class="sidebar-badge badge-upcoming" id="side-count-upcoming">0</span>
+          </button>
+
+          <button type="button" class="sidebar-link" data-sidebar-filter="completed">
+            <span class="sidebar-link-left">
+              <span class="status-dot dot-completed"></span>
+              <span>Completed</span>
+            </span>
+            <span class="sidebar-badge badge-completed" id="side-count-completed">0</span>
+          </button>
+        </div>
+
+        <!-- Management Actions -->
+        <div class="sidebar-nav-group">
+          <span class="sidebar-section-label">Actions</span>
+          
+          <button type="button" id="btn-create-task" class="sidebar-action-btn btn-primary" title="Create a new asset task (Admin only)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span>New Task</span>
+          </button>
+
+          <button type="button" id="btn-manage-stores" class="sidebar-link" title="Manage Store Accounts & Credentials (Admin Only)">
+            <span class="sidebar-link-left">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 2l-2 2m-1.5 1.5L10 13l-4 1 1-4 7.5-7.5m4.5-1.5l2 2"></path>
+                <circle cx="7.5" cy="16.5" r="4.5"></circle>
+              </svg>
+              <span>Store Credentials</span>
+            </span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <button type="button" id="btn-logout" class="sidebar-footer-link btn-logout-action" title="Sign out">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Sign Out</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <div class="app-main-content">
+      <main class="main-layout">
+
+      <!-- Header Overview Banner / Stats -->
+      <section class="overview-section">
+        <div class="overview-header">
+          <div>
+            <h1 class="page-title" id="view-title">All Tasks & Assets</h1>
+            <p class="page-caption" id="view-caption">Monitor, schedule, and complete equipment maintenance across all store locations.</p>
+          </div>
+          <div class="overview-date">
+            <span class="date-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              Today: <strong id="current-date-display">Aug 24, 2026</strong>
+            </span>
+          </div>
+        </div>
+
+        <!-- Status Summary Metric Cards -->
+        <div class="status-kpi-grid">
+          <button class="kpi-card kpi-total active" data-filter-status="all">
+            <div class="kpi-meta">
+              <span class="kpi-label">All Tasks</span>
+              <span class="kpi-count" id="count-all">0</span>
+            </div>
+            <div class="kpi-bar kpi-bar-total"></div>
+          </button>
+
+          <button class="kpi-card kpi-overdue" data-filter-status="overdue">
+            <div class="kpi-meta">
+              <div class="kpi-title-row">
+                <span class="status-dot dot-overdue"></span>
+                <span class="kpi-label">Overdue</span>
+              </div>
+              <span class="kpi-count" id="count-overdue">0</span>
+            </div>
+            <div class="kpi-bar kpi-bar-overdue"></div>
+          </button>
+
+          <button class="kpi-card kpi-due-today" data-filter-status="due-today">
+            <div class="kpi-meta">
+              <div class="kpi-title-row">
+                <span class="status-dot dot-due-today"></span>
+                <span class="kpi-label">Due Today</span>
+              </div>
+              <span class="kpi-count" id="count-due-today">0</span>
+            </div>
+            <div class="kpi-bar kpi-bar-due-today"></div>
+          </button>
+
+          <button class="kpi-card kpi-due-soon" data-filter-status="due-soon">
+            <div class="kpi-meta">
+              <div class="kpi-title-row">
+                <span class="status-dot dot-due-soon"></span>
+                <span class="kpi-label">Due Soon</span>
+              </div>
+              <span class="kpi-count" id="count-due-soon">0</span>
+            </div>
+            <div class="kpi-bar kpi-bar-due-soon"></div>
+          </button>
+
+          <button class="kpi-card kpi-upcoming" data-filter-status="upcoming">
+            <div class="kpi-meta">
+              <div class="kpi-title-row">
+                <span class="status-dot dot-upcoming"></span>
+                <span class="kpi-label">Upcoming</span>
+              </div>
+              <span class="kpi-count" id="count-upcoming">0</span>
+            </div>
+            <div class="kpi-bar kpi-bar-upcoming"></div>
+          </button>
+
+          <button class="kpi-card kpi-completed" data-filter-status="completed">
+            <div class="kpi-meta">
+              <div class="kpi-title-row">
+                <span class="status-dot dot-completed"></span>
+                <span class="kpi-label">Completed</span>
+              </div>
+              <span class="kpi-count" id="count-completed">0</span>
+            </div>
+            <div class="kpi-bar kpi-bar-completed"></div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Filter & Search Toolbar -->
+      <section class="toolbar-section">
+        <div class="search-box">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="search-input" placeholder="Search asset name, ID, area, category, or notes..." autocomplete="off">
+          <button id="btn-clear-search" class="btn-icon-sm hidden" title="Clear search">&times;</button>
+        </div>
+
+        <div class="filter-group">
+          <!-- Store Filter (Visible for Admin) -->
+          <div class="filter-item" id="filter-store-wrapper">
+            <select id="filter-store" class="select-filter" aria-label="Filter by Store">
+              <option value="all">All Stores</option>
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+
+          <!-- Category Filter -->
+          <div class="filter-item">
+            <select id="filter-category" class="select-filter" aria-label="Filter by Category">
+              <option value="all">All Categories</option>
+              <option value="Kitchen Equipment">Kitchen Equipment</option>
+              <option value="HVAC & Cooling">HVAC & Cooling</option>
+              <option value="POS & Tech">POS & Tech</option>
+              <option value="Safety & Security">Safety & Security</option>
+              <option value="Furniture & Fixtures">Furniture & Fixtures</option>
+              <option value="Facility & Plumbing">Facility & Plumbing</option>
+            </select>
+          </div>
+
+          <!-- Sort Order -->
+          <div class="filter-item">
+            <select id="sort-select" class="select-filter" aria-label="Sort Order">
+              <option value="urgency">Sort by Urgency (Overdue first)</option>
+              <option value="date-asc">Due Date (Earliest first)</option>
+              <option value="date-desc">Due Date (Latest first)</option>
+              <option value="name-asc">Asset Name (A-Z)</option>
+            </select>
+          </div>
+
+          <!-- View Switcher (Grid vs Table) -->
+          <div class="view-toggle">
+            <button id="view-toggle-grid" class="btn-toggle active" title="Card View" aria-label="Card View">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
+            </button>
+            <button id="view-toggle-table" class="btn-toggle" title="Table View" aria-label="Table View">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Filters Tag Bar -->
+      <div id="active-filters-bar" class="active-filters-bar hidden">
+        <span class="active-filter-title">Active Filter:</span>
+        <span id="active-status-tag" class="filter-pill"></span>
+        <button id="btn-clear-all-filters" class="btn-link">Clear Filter</button>
+      </div>
+
+      <!-- Task Listing Area -->
+      <section class="tasks-container">
+        <!-- Grid View Mode -->
+        <div id="task-grid" class="task-grid-layout">
+          <!-- Dynamically populated via app.js -->
+        </div>
+
+        <!-- Table View Mode -->
+        <div id="task-table-wrapper" class="task-table-wrapper hidden">
+          <table class="task-table">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Asset Name & ID</th>
+                <th>Category</th>
+                <th>Store & Location</th>
+                <th>Due Date</th>
+                <th>Condition</th>
+                <th>Proof</th>
+                <th>Remarks</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="task-table-body">
+              <!-- Dynamically populated via app.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty State Message -->
+        <div id="empty-state" class="empty-state hidden">
+          <div class="empty-icon">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <h3 class="empty-title">No tasks found</h3>
+          <p class="empty-caption">Try adjusting your filters or search query, or switch role to view tasks.</p>
+          <button id="btn-empty-reset" class="btn btn-secondary mt-3">Clear Filters</button>
+        </div>
+      </section>
+
+    </main>
+  </div> <!-- .app-main-content -->
+
+    <!-- Modal: Store Credentials & Account Management (Admin Only) -->
+    <div id="store-management-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="store-mgmt-title">
+      <div class="modal-card" style="max-width: 760px;">
+        <div class="modal-header">
+          <div>
+            <div class="drawer-pretitle" style="color: #2563EB;">Admin Control Center</div>
+            <h2 id="store-mgmt-title" class="modal-heading">Manage Store Accounts & Credentials</h2>
+            <p class="modal-subheading">Create new store branches, update access PINs/passwords, and configure store manager contacts.</p>
+          </div>
+          <button type="button" class="btn-close" id="btn-store-mgmt-close" aria-label="Close dialog">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          
+          <!-- Stores Credentials Table -->
+          <div class="store-accounts-table-wrapper">
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th>Store Name</th>
+                  <th>Store Code</th>
+                  <th>Manager / Contact</th>
+                  <th>Access PIN</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="store-accounts-tbody">
+                <!-- Dynamically populated from state.storeAccounts -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Add New Store Section -->
+          <div class="add-store-box">
+            <h4 class="feed-header" style="margin-bottom: 8px;">Add New Store Branch</h4>
+            <form id="add-store-form" class="add-store-grid">
+              <div class="form-field">
+                <label for="new-store-name" class="field-label">Store Name <span class="required-star">*</span></label>
+                <input type="text" id="new-store-name" class="input-text" placeholder="e.g. Store #105 - Northside Galleria" required>
+              </div>
+              <div class="form-field">
+                <label for="new-store-code" class="field-label">Store Code <span class="required-star">*</span></label>
+                <input type="text" id="new-store-code" class="input-text" placeholder="e.g. ST-105" required>
+              </div>
+              <div class="form-field">
+                <label for="new-store-manager" class="field-label">Manager / Staff Contact</label>
+                <input type="text" id="new-store-manager" class="input-text" placeholder="e.g. Alex Morgan (alex@store.com)">
+              </div>
+              <div class="form-field">
+                <label for="new-store-pin" class="field-label">Access PIN <span class="required-star">*</span></label>
+                <input type="text" id="new-store-pin" class="input-text" placeholder="e.g. 5566" required>
+              </div>
+              <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 4px;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>Add Store Branch</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-primary" id="btn-store-mgmt-done">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Task Completion & Verification (Required Image & Remarks) -->
+    <div id="completion-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="completion-modal-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <div class="drawer-pretitle" style="color: #059669;">Verification Required</div>
+            <h2 id="completion-modal-title" class="modal-heading">Complete Task & Submit Proof</h2>
+            <p class="modal-subheading">Store accounts must provide completion remarks and attach a photo before completing this task.</p>
+          </div>
+          <button type="button" class="btn-close" id="btn-completion-modal-close" aria-label="Close dialog">&times;</button>
+        </div>
+
+        <form id="completion-form" class="modal-body">
+          <input type="hidden" id="completion-task-id" value="">
+
+          <!-- Asset Summary Card -->
+          <div class="completion-asset-summary">
+            <div>
+              <span class="task-category-tag" id="completion-asset-category">Kitchen Equipment</span>
+              <h3 class="completion-asset-name" id="completion-asset-name">Double Deck Pizza Oven</h3>
+              <p class="completion-asset-location" id="completion-asset-location">Store #101 • Kitchen Main Line</p>
+            </div>
+            <span id="completion-status-pill" class="status-chip chip-due-today">Due Today</span>
+          </div>
+
+          <div class="form-grid" style="grid-template-columns: 1fr; gap: 16px;">
+            
+            <!-- Date of Completion (Store Input) -->
+            <div class="form-field">
+              <label for="completion-date-input" class="field-label">
+                Date of Completion <span class="required-star">*</span>
+              </label>
+              <input type="date" id="completion-date-input" class="input-text" required>
+              <span class="field-hint">Specify the exact date on which the maintenance was carried out.</span>
+            </div>
+
+            <!-- Completion Remarks (Mandatory) -->
+            <div class="form-field">
+              <label for="completion-remarks-input" class="field-label">
+                Completion Remarks / Work Summary <span class="required-star">*</span>
+              </label>
+              <textarea id="completion-remarks-input" class="input-textarea" rows="3" placeholder="Describe the service steps completed, parts replaced, cleanliness check, or operational test performed..." required></textarea>
+              <span class="field-hint">Detail the maintenance work executed by your store staff or technician.</span>
+            </div>
+
+            <!-- Attach Image / Photo Evidence (Mandatory) -->
+            <div class="form-field">
+              <label class="field-label">
+                Attach Maintenance Photo Evidence <span class="required-star">*</span>
+              </label>
+
+              <div class="image-upload-zone" id="image-upload-zone">
+                <input type="file" id="completion-image-file" accept="image/*" class="file-input-hidden">
+                <div class="upload-zone-prompt" id="upload-zone-prompt">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                  </svg>
+                  <div class="upload-text-main">Click to browse or drop equipment photo here</div>
+                  <div class="upload-text-sub">JPEG, PNG, WebP up to 10MB</div>
+                </div>
+
+                <!-- Preview Area -->
+                <div id="image-preview-container" class="image-preview-container hidden">
+                  <img id="image-preview-img" src="" alt="Completion photo proof" class="preview-img-element">
+                  <div class="preview-overlay-actions">
+                    <button type="button" id="btn-remove-image" class="btn btn-secondary btn-sm">Change Photo</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick Demo Photo Buttons -->
+              <div class="sample-photos-row">
+                <span class="sample-photos-label">Or use sample photo preset:</span>
+                <div class="sample-buttons-group">
+                  <button type="button" class="btn-sample-photo" onclick="window.assetApp.useSamplePhoto('oven')">
+                    🍕 Oven Serviced
+                  </button>
+                  <button type="button" class="btn-sample-photo" onclick="window.assetApp.useSamplePhoto('clean')">
+                    ✨ Clean Filter / Sanitized
+                  </button>
+                  <button type="button" class="btn-sample-photo" onclick="window.assetApp.useSamplePhoto('tech')">
+                    🖥️ POS / Electronics Tested
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Asset Condition After Maintenance -->
+            <div class="form-field">
+              <label for="completion-condition-select" class="field-label">Post-Maintenance Asset Condition</label>
+              <select id="completion-condition-select" class="input-select">
+                <option value="Excellent" selected>Excellent (Fully Functional & Clean)</option>
+                <option value="Good">Good (Normal Operation)</option>
+                <option value="Fair">Fair (Operational, monitor closely)</option>
+                <option value="Needs Repair">Needs Further Repair (Follow-up needed)</option>
+              </select>
+            </div>
+
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="btn-completion-modal-cancel">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-completion-submit" style="background: #059669; border-color: #059669;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Submit Proof & Mark Complete</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal: Create / Edit Asset Task (Admin Only) -->
+    <div id="task-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="modal-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div>
+            <h2 id="modal-title" class="modal-heading">Create Asset Task</h2>
+            <p class="modal-subheading">Fill in the asset details and schedule maintenance.</p>
+          </div>
+          <button type="button" class="btn-close" id="btn-modal-close" aria-label="Close dialog">&times;</button>
+        </div>
+
+        <form id="task-form" class="modal-body">
+          <input type="hidden" id="form-task-id" value="">
+
+          <div class="form-grid">
+            
+            <!-- Asset Name -->
+            <div class="form-field">
+              <label for="form-asset-name" class="field-label">Asset Name <span class="required-star">*</span></label>
+              <input type="text" id="form-asset-name" class="input-text" placeholder="e.g. Double Deck Pizza Oven, Dough Mixer 50L, V" required>
+            </div>
+
+            <!-- Category (with Custom Category support) -->
+            <div class="form-field">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <label for="form-category" class="field-label">Category <span class="required-star">*</span></label>
+                <button type="button" id="btn-toggle-custom-category" class="btn-link" style="font-size: 11.5px; font-weight: 600;">+ New Category</button>
+              </div>
+              <select id="form-category" class="input-select" required>
+                <!-- Dynamically populated from state.categories -->
+              </select>
+              <div id="form-custom-category-container" class="hidden" style="margin-top: 6px; display: flex; gap: 6px;">
+                <input type="text" id="form-custom-category-input" class="input-text" placeholder="Enter new custom category name...">
+                <button type="button" id="btn-save-custom-category" class="btn btn-secondary btn-sm" style="white-space: nowrap;">Add</button>
+                <button type="button" id="btn-cancel-custom-category" class="btn btn-ghost btn-sm">✕</button>
+              </div>
+            </div>
+
+            <!-- Assigned Store -->
+            <div class="form-field">
+              <label for="form-store" class="field-label">Assigned Store <span class="required-star">*</span></label>
+              <select id="form-store" class="input-select" required>
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+
+            <!-- Location / Area -->
+            <div class="form-field">
+              <label for="form-location" class="field-label">Location / Area <span class="required-star">*</span></label>
+              <input type="text" id="form-location" class="input-text" placeholder="e.g. Cashier Counter 1, Back Stockroom" required>
+            </div>
+
+            <!-- Scheduled Due Date -->
+            <div class="form-field">
+              <label for="form-due-date" class="field-label">Scheduled Due Date <span class="required-star">*</span></label>
+              <input type="date" id="form-due-date" class="input-text" required>
+            </div>
+
+            <!-- Maintenance Cycle -->
+            <div class="form-field">
+              <label for="form-cycle" class="field-label">Maintenance Cycle <span class="required-star">*</span></label>
+              <select id="form-cycle" class="input-select" required>
+                <option value="Monthly" selected>Monthly</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Bi-Weekly">Bi-Weekly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Semi-Annual">Semi-Annual</option>
+                <option value="Annual">Annual</option>
+                <option value="Custom Scheduled Date">Custom Scheduled Date</option>
+                <option value="One-Time Inspection">One-Time Inspection</option>
+              </select>
+            </div>
+
+            <!-- Next Maintenance Cycle Scheduled Date (Admin Specific Date Control) -->
+            <div class="form-field full-width" id="form-next-cycle-container" style="background: var(--bg-surface-subtle); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                <label for="form-next-cycle-date" class="field-label" style="margin-bottom: 0;">
+                  Next Maintenance Cycle Due Date 
+                  <span class="badge-role">Admin Scheduled Date</span>
+                </label>
+                <span id="form-next-cycle-status-preview" class="status-chip chip-upcoming" style="font-size: 10.5px; padding: 2px 7px;">Upcoming</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="date" id="form-next-cycle-date" class="input-text" style="flex: 1;">
+                <button type="button" id="btn-auto-calc-cycle" class="btn btn-secondary btn-sm" title="Auto-calculate date from maintenance cycle">
+                  Auto Calculate
+                </button>
+              </div>
+              <p class="field-hint" style="margin-top: 4px;">Admin can set the exact specific date when the next recurring maintenance cycle must take place.</p>
+            </div>
+
+            <!-- Asset Condition (with Custom Condition support) -->
+            <div class="form-field">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <label for="form-condition" class="field-label">Asset Condition <span class="required-star">*</span></label>
+                <button type="button" id="btn-toggle-custom-condition" class="btn-link" style="font-size: 11.5px; font-weight: 600;">+ New Condition</button>
+              </div>
+              <select id="form-condition" class="input-select" required>
+                <!-- Dynamically populated from state.conditions -->
+              </select>
+              <div id="form-custom-condition-container" class="hidden" style="margin-top: 6px; display: flex; gap: 6px;">
+                <input type="text" id="form-custom-condition-input" class="input-text" placeholder="Enter new custom condition (e.g. In Overhaul, Calibrated)...">
+                <button type="button" id="btn-save-custom-condition" class="btn btn-secondary btn-sm" style="white-space: nowrap;">Add</button>
+                <button type="button" id="btn-cancel-custom-condition" class="btn btn-ghost btn-sm">✕</button>
+              </div>
+            </div>
+
+            <!-- Serial / Asset ID (Optional) -->
+            <div class="form-field">
+              <label for="form-serial" class="field-label">Serial / Asset ID <span class="optional-tag">(Optional)</span></label>
+              <input type="text" id="form-serial" class="input-text" placeholder="e.g. AST-007 or SN-88941">
+            </div>
+
+            <!-- Estimated Value / Cost ($) (Optional) -->
+            <div class="form-field">
+              <label for="form-cost" class="field-label">Estimated Value / Cost ($) <span class="optional-tag">(Optional)</span></label>
+              <input type="number" id="form-cost" class="input-text" placeholder="e.g. 500" min="0" step="1">
+            </div>
+
+            <!-- Priority -->
+            <div class="form-field">
+              <label for="form-priority" class="field-label">Task Priority</label>
+              <select id="form-priority" class="input-select">
+                <option value="Medium" selected>Medium Priority</option>
+                <option value="High">High Priority</option>
+                <option value="Critical">Critical Priority</option>
+                <option value="Low">Low Priority</option>
+              </select>
+            </div>
+
+            <!-- Override Status (Admin only section) -->
+            <div class="form-field full-width" id="form-status-override-container">
+              <label for="form-status-override" class="field-label">Task Status <span class="badge-role">Admin Control</span></label>
+              <select id="form-status-override" class="input-select">
+                <option value="auto">Auto (Calculate based on Due Date: Overdue/Due Today/Due Soon/Upcoming)</option>
+                <option value="Completed">Mark as Completed</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Under Review">Under Review</option>
+              </select>
+              <span class="field-hint">Admins can override the task status at any time, even after it was marked completed.</span>
+            </div>
+
+            <!-- Task Instructions / Notes -->
+            <div class="form-field full-width">
+              <label for="form-description" class="field-label">Task Instructions & Checklist <span class="optional-tag">(Optional)</span></label>
+              <textarea id="form-description" class="input-textarea" rows="3" placeholder="Describe the inspection steps, filter cleaning, calibration, or safety verification required..."></textarea>
+            </div>
+
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" id="btn-modal-cancel">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-modal-submit">Save Task</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Drawer / Slide-Over: Comments & Task History -->
+    <div id="comments-drawer" class="drawer-backdrop hidden" aria-hidden="true">
+      <div class="drawer-panel">
+        <div class="drawer-header">
+          <div>
+            <div class="drawer-pretitle">Task Activity & Comments</div>
+            <h3 id="drawer-asset-name" class="drawer-title">Double Deck Pizza Oven</h3>
+            <div id="drawer-asset-meta" class="drawer-subtitle">Store #101 • AST-001</div>
+          </div>
+          <button type="button" class="btn-close" id="btn-drawer-close" aria-label="Close comments panel">&times;</button>
+        </div>
+
+        <div class="drawer-body">
+          <!-- Mini Task Quick Status Info -->
+          <div class="drawer-task-badge-row">
+            <span id="drawer-status-badge" class="status-chip chip-overdue">Overdue</span>
+            <span id="drawer-due-badge" class="meta-chip">Due: Aug 20, 2026</span>
+            <span id="drawer-condition-badge" class="meta-chip">Condition: Good</span>
+          </div>
+
+          <!-- Instruction Callout -->
+          <div id="drawer-instructions-box" class="instructions-callout hidden">
+            <div class="callout-label">Instructions:</div>
+            <div id="drawer-instructions-text" class="callout-text"></div>
+          </div>
+
+          <!-- Attached Proof Image Preview if present -->
+          <div id="drawer-proof-box" class="proof-photo-section hidden">
+            <div class="proof-photo-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <span>Verified Maintenance Photo</span>
+            </div>
+            <div class="proof-img-wrapper" id="drawer-proof-img-container">
+              <img id="drawer-proof-img" src="" alt="Completion photo proof" class="drawer-proof-thumbnail" onclick="window.assetApp.openLightbox(this.src, 'Completion Proof Photo')">
+            </div>
+          </div>
+
+          <!-- Comments Feed -->
+          <div class="comments-feed-wrapper">
+            <h4 class="feed-header">Updates & Remarks (<span id="comments-count">0</span>)</h4>
+            <div id="comments-list" class="comments-list">
+              <!-- Dynamically populated comments -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Comment Form -->
+        <div class="drawer-footer">
+          <form id="comment-form" class="comment-input-area">
+            <div class="comment-author-badge">
+              Posting as: <strong id="comment-author-label">Admin</strong>
+            </div>
+            <textarea id="comment-input" class="comment-textarea" placeholder="Add a comment, inspection note, or status update..." rows="2" required></textarea>
+            <div class="comment-submit-row">
+              <button type="submit" class="btn btn-primary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+                <span>Post Comment</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightbox Image Modal (Full Preview) -->
+    <div id="lightbox-modal" class="modal-backdrop" aria-hidden="true" role="dialog">
+      <div class="lightbox-content">
+        <button type="button" class="btn-close lightbox-close" id="btn-lightbox-close">&times;</button>
+        <img id="lightbox-image" src="" alt="Full preview" class="lightbox-img">
+        <div class="lightbox-caption" id="lightbox-caption">Maintenance Photo Evidence</div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="toast" class="toast-notification hidden" role="alert">
+      <span class="toast-icon">✓</span>
+      <span id="toast-message">Task updated successfully</span>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
