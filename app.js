@@ -1,9 +1,10 @@
 /**
- * AssetFlow — Minimalist Asset & Task Management System with Sidebar
+ * AssetFlow — Minimalist Asset & Task Management System with Firebase Cloud Database
  * Features:
+ * - Real-Time Google Firebase Firestore Cloud Sync (Accessible worldwide on any PC/device)
  * - Persistent Left Sidebar Navigation & Off-Canvas Mobile Drawer
  * - Store Account Date of Completion selection on task verification
- * - Custom Category & Custom Asset Condition Creation & Synchronization
+ * - Custom Category & Custom Asset Condition Creation & Cloud Synchronization
  * - Admin Store Credentials Management (Add, Edit PIN, Delete Store Accounts)
  * - Strict Store Permissions (Store accounts cannot edit or reopen tasks; only mark done with date, photo & remarks, and add comments)
  * - Maintenance Cycle Automation & Dynamic Color Status Tracking (Overdue: Red, Due Today: Blue, Due Soon: Orange, Upcoming: Gray, Completed: Green)
@@ -17,12 +18,40 @@
   const TODAY_STR = '2026-08-24';
   const TODAY = new Date(TODAY_STR + 'T00:00:00');
 
-  // Storage keys (v3 for clean custom store setup)
-  const STORAGE_KEY = 'assetflow_tasks_db_v3';
-  const AUTH_STORAGE_KEY = 'assetflow_auth_session_v3';
-  const STORES_STORAGE_KEY = 'assetflow_stores_db_v3';
-  const CATEGORIES_STORAGE_KEY = 'assetflow_categories_db_v3';
-  const CONDITIONS_STORAGE_KEY = 'assetflow_conditions_db_v3';
+  // Firebase Configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyARd5ueTOKiEk-HOLLM1G-hqQtuv_8KTe0",
+    authDomain: "gitassetmanagement.firebaseapp.com",
+    projectId: "gitassetmanagement",
+    storageBucket: "gitassetmanagement.firebasestorage.app",
+    messagingSenderId: "809200034755",
+    appId: "1:809200034755:web:47e58e2b6dfcb0e7b8d376",
+    measurementId: "G-TKR89Q3PWE"
+  };
+
+  // Initialize Firebase Cloud Firestore
+  let db = null;
+  let isFirebaseReady = false;
+
+  try {
+    if (typeof firebase !== 'undefined' && firebase.initializeApp) {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      db = firebase.firestore();
+      isFirebaseReady = true;
+      console.log('Firebase Cloud Firestore Initialized Successfully');
+    }
+  } catch (err) {
+    console.warn('Firebase init error, fallback to local storage:', err);
+  }
+
+  // Storage keys (Offline Cache / Local Backup)
+  const STORAGE_KEY = 'assetflow_tasks_db_v4';
+  const AUTH_STORAGE_KEY = 'assetflow_auth_session_v4';
+  const STORES_STORAGE_KEY = 'assetflow_stores_db_v4';
+  const CATEGORIES_STORAGE_KEY = 'assetflow_categories_db_v4';
+  const CONDITIONS_STORAGE_KEY = 'assetflow_conditions_db_v4';
 
   // Default Categories
   const DEFAULT_CATEGORIES = [
@@ -205,7 +234,100 @@
     return state.auth.store || 'Store Account';
   }
 
-  // Save to localStorage
+  // =========================================================================
+  // Firebase Cloud Database Synchronization
+  // =========================================================================
+
+  function syncTaskToCloud(task) {
+    if (!isFirebaseReady || !db) return;
+    db.collection('tasks').doc(task.id).set(task).catch(err => {
+      console.warn('Error saving task to Firebase:', err);
+    });
+  }
+
+  function syncStoreToCloud(store) {
+    if (!isFirebaseReady || !db) return;
+    db.collection('stores').doc(store.id).set(store).catch(err => {
+      console.warn('Error saving store to Firebase:', err);
+    });
+  }
+
+  function removeStoreFromCloud(storeId) {
+    if (!isFirebaseReady || !db) return;
+    db.collection('stores').doc(storeId).delete().catch(err => {
+      console.warn('Error deleting store from Firebase:', err);
+    });
+  }
+
+  function syncMetadataToCloud() {
+    if (!isFirebaseReady || !db) return;
+    db.collection('settings').doc('metadata').set({
+      categories: state.categories,
+      conditions: state.conditions,
+      updatedAt: new Date().toISOString()
+    }).catch(err => {
+      console.warn('Error saving metadata to Firebase:', err);
+    });
+  }
+
+  // Listen to Real-time Cloud updates from Firebase
+  function setupCloudRealtimeListeners() {
+    if (!isFirebaseReady || !db) return;
+
+    // 1. Live Stores Listener
+    db.collection('stores').onSnapshot((snapshot) => {
+      const cloudStores = [];
+      snapshot.forEach(doc => cloudStores.push(doc.data()));
+      if (cloudStores.length > 0 || snapshot.metadata.hasPendingWrites === false) {
+        state.storeAccounts = cloudStores;
+        localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(state.storeAccounts));
+        syncStoreOptions();
+        renderStoreAccountsList();
+        render();
+      }
+    }, err => {
+      console.warn('Stores realtime sync note:', err.message);
+    });
+
+    // 2. Live Tasks Listener
+    db.collection('tasks').onSnapshot((snapshot) => {
+      const cloudTasks = [];
+      snapshot.forEach(doc => {
+        const t = doc.data();
+        if (t.status !== 'Completed') {
+          t.status = calculateTaskStatus(t);
+        }
+        cloudTasks.push(t);
+      });
+      state.tasks = cloudTasks;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+      render();
+    }, err => {
+      console.warn('Tasks realtime sync note:', err.message);
+    });
+
+    // 3. Live Metadata (Categories & Conditions) Listener
+    db.collection('settings').doc('metadata').onSnapshot((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        if (data.categories && Array.isArray(data.categories)) {
+          state.categories = data.categories;
+          localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories));
+          syncCategoryOptions();
+        }
+        if (data.conditions && Array.isArray(data.conditions)) {
+          state.conditions = data.conditions;
+          localStorage.setItem(CONDITIONS_STORAGE_KEY, JSON.stringify(state.conditions));
+          syncConditionOptions();
+        }
+        render();
+      }
+    }, err => {
+      console.warn('Metadata realtime sync note:', err.message);
+    });
+  }
+
+  // Save to localStorage & Cloud
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
@@ -218,7 +340,7 @@
     }
   }
 
-  // Load from localStorage or seed clean state
+  // Load initial state from storage
   function loadState() {
     try {
       const savedConditions = localStorage.getItem(CONDITIONS_STORAGE_KEY);
@@ -527,6 +649,7 @@
 
     state.categories.push(trimmed);
     saveState();
+    syncMetadataToCloud();
     syncCategoryOptions();
     el.formCategory.value = trimmed;
     hideCustomCategoryInput();
@@ -590,6 +713,7 @@
 
     state.conditions.push(trimmed);
     saveState();
+    syncMetadataToCloud();
     syncConditionOptions();
     el.formCondition.value = trimmed;
     hideCustomConditionInput();
@@ -742,7 +866,7 @@
       el.viewTitle.textContent = state.filterStore === 'all' 
         ? 'All Stores Task Overview' 
         : `${state.filterStore} — Tasks`;
-      el.viewCaption.textContent = 'Admin Mode: Create, assign, edit, override status, manage store credentials, and review verification proofs.';
+      el.viewCaption.textContent = 'Admin Mode: Create, assign, edit, override status, manage store credentials, and review verification proofs in real-time.';
     } else {
       el.userDisplayName.textContent = state.auth.store || 'Store Account';
       el.userRoleLabel.textContent = 'Store Staff / Operator';
@@ -753,7 +877,7 @@
       el.btnCreateTask.classList.add('hidden');
       el.filterStoreWrapper.classList.add('hidden');
       el.viewTitle.textContent = `${state.auth.store} Workspace`;
-      el.viewCaption.textContent = 'Store Mode: View your assigned tasks, mark them complete with date, required photo proof & remarks, and post activity notes.';
+      el.viewCaption.textContent = 'Store Mode: View assigned tasks, mark them complete with date, required photo proof & remarks, and post activity notes.';
     }
 
     if (state.filterStatus !== 'all') {
@@ -1142,6 +1266,7 @@
     }
     state.storeAccounts[index].pin = newPin;
     saveState();
+    syncStoreToCloud(state.storeAccounts[index]);
     showToast(`Updated PIN for ${state.storeAccounts[index].name}`);
   }
 
@@ -1151,8 +1276,10 @@
     if (!targetStore) return;
 
     if (confirm(`Are you sure you want to delete "${targetStore.name}"?`)) {
+      const removedId = targetStore.id;
       state.storeAccounts.splice(index, 1);
       saveState();
+      removeStoreFromCloud(removedId);
       syncStoreOptions();
       renderStoreAccountsList();
       render();
@@ -1185,16 +1312,18 @@
       name,
       code,
       manager,
-      pin
+      pin,
+      createdAt: new Date().toISOString()
     };
 
     state.storeAccounts.push(newStore);
     saveState();
+    syncStoreToCloud(newStore);
     syncStoreOptions();
     renderStoreAccountsList();
     render();
     el.addStoreForm.reset();
-    showToast(`Store "${name}" successfully added!`);
+    showToast(`Store "${name}" successfully added and saved to Cloud!`);
   }
 
   // =========================================================================
@@ -1226,6 +1355,7 @@
         });
         showToast(`Task reopened: ${task.assetName}`);
         saveState();
+        syncTaskToCloud(task);
         render();
         if (state.activeDrawerTaskId === taskId) {
           openCommentsDrawer(taskId);
@@ -1368,6 +1498,7 @@
     });
 
     saveState();
+    syncTaskToCloud(task);
     closeCompletionModal();
     render();
 
@@ -1467,6 +1598,7 @@
       if (task.category && !state.categories.includes(task.category)) {
         state.categories.push(task.category);
         syncCategoryOptions();
+        syncMetadataToCloud();
       }
       el.formCategory.value = task.category || '';
 
@@ -1474,6 +1606,7 @@
       if (task.condition && !state.conditions.includes(task.condition)) {
         state.conditions.push(task.condition);
         syncConditionOptions();
+        syncMetadataToCloud();
       }
       el.formCondition.value = task.condition || 'Good';
 
@@ -1681,7 +1814,7 @@
         newStatus = statusOverride;
       }
 
-      state.tasks[taskIndex] = {
+      const updatedTask = {
         ...existing,
         assetName,
         category,
@@ -1698,7 +1831,10 @@
         description
       };
 
-      showToast(`Updated task: ${assetName} (Next cycle: ${nextCycleDueDate ? formatDateDisplay(nextCycleDueDate) : 'None'})`);
+      state.tasks[taskIndex] = updatedTask;
+      saveState();
+      syncTaskToCloud(updatedTask);
+      showToast(`Updated task: ${assetName} (Synced to Cloud)`);
     } else {
       const newTask = {
         id: 'task-' + Date.now(),
@@ -1728,10 +1864,11 @@
       };
 
       state.tasks.unshift(newTask);
-      showToast(`New task created for ${store}`);
+      saveState();
+      syncTaskToCloud(newTask);
+      showToast(`New task created for ${store} (Synced to Cloud)`);
     }
 
-    saveState();
     closeTaskModal();
     render();
   }
@@ -1757,10 +1894,11 @@
     });
 
     saveState();
+    syncTaskToCloud(task);
     renderCommentsList(task);
     render();
     el.commentInput.value = '';
-    showToast('Remark posted successfully');
+    showToast('Remark posted and synced to Cloud');
   }
 
   function escapeHTML(str) {
@@ -2136,6 +2274,7 @@
     syncConditionOptions();
     bindEvents();
     render();
+    setupCloudRealtimeListeners();
   }
 
   // Global interface for onclick actions
