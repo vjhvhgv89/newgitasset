@@ -841,7 +841,9 @@
 
       return true;
     }).sort((a, b) => {
-      if (state.sortBy === 'urgency') {
+      if (state.sortBy === 'custom') {
+        return 0;
+      } else if (state.sortBy === 'urgency') {
         const metaA = getStatusMeta(a.status);
         const metaB = getStatusMeta(b.status);
         if (metaA.rank !== metaB.rank) return metaA.rank - metaB.rank;
@@ -1013,11 +1015,21 @@
       }
 
       return `
-        <article class="task-card" data-id="${task.id}">
+        <article class="task-card" draggable="true" data-id="${task.id}" data-task-id="${task.id}">
           <div>
             <div class="task-card-header">
               <div class="task-title-group">
-                <span class="task-category-tag">${escapeHTML(task.category)}</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="task-category-tag">${escapeHTML(task.category)}</span>
+                  <span class="drag-handle-badge" title="Drag to reorder tasks">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/>
+                      <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+                      <circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/>
+                    </svg>
+                    <span>Drag</span>
+                  </span>
+                </div>
                 <h3 class="task-asset-title">
                   ${escapeHTML(task.assetName)}
                   ${task.serialNumber ? `<span class="task-id-badge">#${escapeHTML(task.serialNumber)}</span>` : ''}
@@ -1171,7 +1183,7 @@
       }
 
       return `
-        <tr>
+        <tr draggable="true" data-task-id="${task.id}">
           <td>
             <span class="status-chip ${meta.className}">
               <span class="status-dot ${meta.dotClass}"></span>
@@ -2728,12 +2740,76 @@
     });
   }
 
+  let draggedTaskId = null;
+
+  function setupTaskDragAndDrop() {
+    const grid = el.taskGrid;
+    const tableBody = el.taskTableBody;
+
+    function handleDragStart(e) {
+      const item = e.target.closest('[data-task-id]');
+      if (!item) return;
+      draggedTaskId = item.getAttribute('data-task-id');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedTaskId);
+      setTimeout(() => item.classList.add('is-dragging'), 0);
+    }
+
+    function handleDragEnd(e) {
+      const item = e.target.closest('[data-task-id]');
+      if (item) item.classList.remove('is-dragging');
+      document.querySelectorAll('.is-dragging').forEach(elem => elem.classList.remove('is-dragging'));
+      draggedTaskId = null;
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      const dropTarget = e.target.closest('[data-task-id]');
+      if (!dropTarget || !draggedTaskId) return;
+
+      const targetTaskId = dropTarget.getAttribute('data-task-id');
+      if (!targetTaskId || targetTaskId === draggedTaskId) return;
+
+      const draggedIdx = state.tasks.findIndex(t => t.id === draggedTaskId);
+      const targetIdx = state.tasks.findIndex(t => t.id === targetTaskId);
+
+      if (draggedIdx !== -1 && targetIdx !== -1) {
+        const [movedTask] = state.tasks.splice(draggedIdx, 1);
+        state.tasks.splice(targetIdx, 0, movedTask);
+
+        state.sortBy = 'custom';
+        if (el.sortSelect) el.sortSelect.value = 'custom';
+
+        saveState();
+        state.tasks.forEach(t => syncTaskToCloud(t));
+        render();
+        showToast('Task reordered & saved to Cloud!');
+      }
+    }
+
+    [grid, tableBody].forEach(container => {
+      if (!container) return;
+      container.addEventListener('dragstart', handleDragStart);
+      container.addEventListener('dragend', handleDragEnd);
+      container.addEventListener('dragover', handleDragOver);
+      container.addEventListener('drop', handleDrop);
+    });
+  }
+
   function init() {
     loadState();
     syncStoreOptions();
     syncCategoryOptions();
     syncConditionOptions();
     bindEvents();
+    setupTaskDragAndDrop();
     render();
     setupCloudRealtimeListeners();
   }
