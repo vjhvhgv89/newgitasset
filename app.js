@@ -1158,7 +1158,11 @@
               ${isComplete ? `
                 ${isAdmin() ? `
                   <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task (Admin only)">
-                    Reopen
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="1 4 1 10 7 10"></polyline>
+                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                    </svg>
+                    <span>Reopen</span>
                   </button>
                 ` : ''}
 
@@ -1169,21 +1173,14 @@
                     </svg>
                     <span>Start Next Cycle</span>
                   </button>
-                ` : isAdmin() ? `
-                  <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                    ✓ Completed
-                  </span>
-                ` : `
+                ` : !isAdmin() ? `
                   <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                     Done (${formatDateDisplay(task.completedAt)})
                   </span>
-                `}
+                ` : ''}
               ` : !isAdmin() ? `
                 <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Specify completion date, photo proof & remarks">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
