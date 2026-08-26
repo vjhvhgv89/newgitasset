@@ -117,7 +117,7 @@
     calendarYear: 2026,
     calendarMonth: 7,
     activeDrawerTaskId: null,
-    
+
     // Completion Modal State
     completingTaskId: null,
     completionAttachedImageData: null
@@ -140,7 +140,7 @@
     if (!isoStr) return '';
     const d = new Date(isoStr);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
   // Calculate status for any date string relative to reference date (August 24, 2026)
@@ -178,7 +178,7 @@
     if (parts.length !== 3) return null;
 
     const base = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-    
+
     switch (cycle) {
       case 'Weekly':
         base.setDate(base.getDate() + 7);
@@ -424,7 +424,7 @@
       if (savedAuth) {
         state.auth = JSON.parse(savedAuth);
       }
-      
+
       const rawTasks = localStorage.getItem(STORAGE_KEY);
       if (rawTasks) {
         state.tasks = JSON.parse(rawTasks);
@@ -481,7 +481,7 @@
     btnManageStores: document.getElementById('btn-manage-stores'),
     btnLogout: document.getElementById('btn-logout'),
     btnCreateTask: document.getElementById('btn-create-task'),
-    
+
     // Sidebar Badge Counts
     sideCountAll: document.getElementById('side-count-all'),
     sideCountOverdue: document.getElementById('side-count-overdue'),
@@ -494,7 +494,7 @@
     viewTitle: document.getElementById('view-title'),
     viewCaption: document.getElementById('view-caption'),
     currentDateDisplay: document.getElementById('current-date-display'),
-    
+
     // KPI counters
     countAll: document.getElementById('count-all'),
     countOverdue: document.getElementById('count-overdue'),
@@ -571,7 +571,7 @@
     taskForm: document.getElementById('task-form'),
     formTaskId: document.getElementById('form-task-id'),
     formAssetName: document.getElementById('form-asset-name'),
-    
+
     // Category controls
     formCategory: document.getElementById('form-category'),
     btnToggleCustomCategory: document.getElementById('btn-toggle-custom-category'),
@@ -629,6 +629,14 @@
     lightboxCaption: document.getElementById('lightbox-caption'),
     btnLightboxClose: document.getElementById('btn-lightbox-close'),
 
+    // Confirmation Dialog Card Modal
+    confirmModal: document.getElementById('confirm-modal'),
+    confirmModalIcon: document.getElementById('confirm-modal-icon'),
+    confirmModalTitle: document.getElementById('confirm-modal-title'),
+    confirmModalMessage: document.getElementById('confirm-modal-message'),
+    btnConfirmCancel: document.getElementById('btn-confirm-cancel'),
+    btnConfirmOk: document.getElementById('btn-confirm-ok'),
+
     // Toast
     toast: document.getElementById('toast'),
     toastMessage: document.getElementById('toast-message')
@@ -645,6 +653,59 @@
     }, 3500);
   }
 
+  function showConfirmModal({ title, message, iconType = 'primary', okText = 'Confirm', okClass = 'btn-primary', onConfirm }) {
+    if (!el.confirmModal) return;
+
+    if (el.confirmModalTitle) el.confirmModalTitle.textContent = title;
+    if (el.confirmModalMessage) el.confirmModalMessage.innerHTML = message;
+
+    if (el.confirmModalIcon) {
+      if (iconType === 'danger') {
+        el.confirmModalIcon.className = 'confirm-modal-icon-wrapper danger';
+        el.confirmModalIcon.innerHTML = `
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+            <path d="M10 11v6"></path><path d="M14 11v6"></path>
+            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+          </svg>
+        `;
+      } else {
+        el.confirmModalIcon.className = 'confirm-modal-icon-wrapper';
+        el.confirmModalIcon.innerHTML = `
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1 4 1 10 7 10"></polyline>
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+          </svg>
+        `;
+      }
+    }
+
+    if (el.btnConfirmOk) {
+      el.btnConfirmOk.textContent = okText;
+      el.btnConfirmOk.className = `btn ${okClass}`;
+      el.btnConfirmOk.onclick = () => {
+        closeConfirmModal();
+        if (typeof onConfirm === 'function') onConfirm();
+      };
+    }
+
+    if (el.btnConfirmCancel) {
+      el.btnConfirmCancel.onclick = () => {
+        closeConfirmModal();
+      };
+    }
+
+    el.confirmModal.classList.add('open');
+    el.confirmModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeConfirmModal() {
+    if (!el.confirmModal) return;
+    el.confirmModal.classList.remove('open');
+    el.confirmModal.setAttribute('aria-hidden', 'true');
+  }
+
   // Populate dynamic store dropdowns
   function syncStoreOptions() {
     const storeNames = state.storeAccounts.map(s => s.name);
@@ -657,7 +718,7 @@
       return;
     }
 
-    el.loginStoreSelect.innerHTML = storeNames.map(name => 
+    el.loginStoreSelect.innerHTML = storeNames.map(name =>
       `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`
     ).join('');
 
@@ -758,7 +819,7 @@
     }
 
     const currentCompCond = el.completionConditionSelect.value;
-    el.completionConditionSelect.innerHTML = state.conditions.map(c => 
+    el.completionConditionSelect.innerHTML = state.conditions.map(c =>
       `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`
     ).join('');
     if (currentCompCond && state.conditions.includes(currentCompCond)) {
@@ -937,16 +998,16 @@
       el.btnManageStores.classList.remove('hidden');
       el.btnCreateTask.classList.remove('hidden');
       el.filterStoreWrapper.classList.remove('hidden');
-      el.viewTitle.textContent = state.filterStore === 'all' 
-        ? 'All Stores Task Overview' 
+      el.viewTitle.textContent = state.filterStore === 'all'
+        ? 'All Stores Task Overview'
         : `${state.filterStore} — Tasks`;
       el.viewCaption.textContent = 'Admin Mode: Create, assign, edit, override status, manage store credentials, and review verification proofs in real-time.';
     } else {
       const storeName = state.auth.store || 'Store Account';
       const storeAccount = state.storeAccounts.find(s => s.name === storeName || s.code === storeName);
-      
-      const managerContact = (storeAccount && storeAccount.manager && storeAccount.manager.trim()) 
-        ? storeAccount.manager.trim() 
+
+      const managerContact = (storeAccount && storeAccount.manager && storeAccount.manager.trim())
+        ? storeAccount.manager.trim()
         : 'Store Staff / Operator';
 
       const storeCode = (storeAccount && storeAccount.code && storeAccount.code.trim())
@@ -988,7 +1049,7 @@
       const isComplete = status === 'Completed';
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
-      
+
       const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => c.proofImage)));
       const latestProof = task.proofImage || (task.comments && [...task.comments].reverse().find(c => c.proofImage)?.proofImage);
 
@@ -1097,11 +1158,7 @@
               ${isComplete ? `
                 ${isAdmin() ? `
                   <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task (Admin only)">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="1 4 1 10 7 10"></polyline>
-                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
-                    </svg>
-                    <span>Reopen</span>
+                    Reopen
                   </button>
                 ` : ''}
 
@@ -1112,14 +1169,21 @@
                     </svg>
                     <span>Start Next Cycle</span>
                   </button>
-                ` : !isAdmin() ? `
+                ` : isAdmin() ? `
+                  <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    ✓ Completed
+                  </span>
+                ` : `
                   <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                       <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
                     Done (${formatDateDisplay(task.completedAt)})
                   </span>
-                ` : ''}
+                `}
               ` : !isAdmin() ? `
                 <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Specify completion date, photo proof & remarks">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1342,7 +1406,7 @@
 
   function renderCalendarDayCell(dayNum, dateStr, dayTasks, isOtherMonth, isToday) {
     const cellClass = `calendar-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'is-today' : ''}`;
-    
+
     const taskPillsHtml = dayTasks.map(t => {
       const status = (t.status === 'Completed') ? 'Completed' : calculateTaskStatus(t);
       let pillClass = 'pill-upcoming';
@@ -1560,7 +1624,7 @@
 
   function renderStoreAccountsList() {
     if (!state.storeAccounts) state.storeAccounts = [];
-    
+
     // Ensure every store account has a unique ID
     state.storeAccounts.forEach((s, idx) => {
       if (!s.id) {
@@ -1609,7 +1673,7 @@
 
   function updateStoreAccount(storeIdOrIndex) {
     if (!isAdmin()) return;
-    
+
     let store = state.storeAccounts.find(s => s.id === String(storeIdOrIndex));
     if (!store && typeof storeIdOrIndex === 'number' && state.storeAccounts[storeIdOrIndex]) {
       store = state.storeAccounts[storeIdOrIndex];
@@ -1697,7 +1761,7 @@
 
   function deleteStoreAccount(storeIdOrIndex) {
     if (!isAdmin()) return;
-    
+
     let index = state.storeAccounts.findIndex(s => s.id === String(storeIdOrIndex));
     if (index === -1 && typeof storeIdOrIndex === 'number') {
       index = storeIdOrIndex;
@@ -1709,16 +1773,23 @@
     const targetStore = state.storeAccounts[index];
     if (!targetStore) return;
 
-    if (confirm(`Are you sure you want to delete "${targetStore.name}"?`)) {
-      const removedId = targetStore.id;
-      state.storeAccounts.splice(index, 1);
-      saveState();
-      removeStoreFromCloud(removedId);
-      syncStoreOptions();
-      renderStoreAccountsList();
-      render();
-      showToast(`Store ${targetStore.name} removed.`);
-    }
+    showConfirmModal({
+      title: 'Delete Store Account?',
+      message: `Are you sure you want to delete store branch <strong>"${escapeHTML(targetStore.name)}"</strong>?<br><br><small style="color: #DC2626;">Staff will no longer be able to log in to this store branch.</small>`,
+      iconType: 'danger',
+      okText: 'Delete Store',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        const removedId = targetStore.id;
+        state.storeAccounts.splice(index, 1);
+        saveState();
+        removeStoreFromCloud(removedId);
+        syncStoreOptions();
+        renderStoreAccountsList();
+        render();
+        showToast(`Store ${targetStore.name} removed.`);
+      }
+    });
   }
 
   function deleteTask(taskId) {
@@ -1727,13 +1798,20 @@
     if (idx === -1) return;
     const task = state.tasks[idx];
 
-    if (confirm(`Permanently delete asset "${task.assetName}" from store "${task.store}"?\n\nThis action cannot be undone and will remove all maintenance history for this asset.`)) {
-      state.tasks.splice(idx, 1);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
-      removeTaskFromCloud(taskId);
-      render();
-      showToast(`Asset "${task.assetName}" deleted.`);
-    }
+    showConfirmModal({
+      title: 'Delete Asset Task?',
+      message: `Are you sure you want to permanently delete <strong>"${escapeHTML(task.assetName)}"</strong> (${escapeHTML(task.store)})?<br><br><small style="color: #DC2626;">This action cannot be undone and will remove all maintenance records and photo proofs for this asset.</small>`,
+      iconType: 'danger',
+      okText: 'Delete Asset',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        state.tasks.splice(idx, 1);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+        removeTaskFromCloud(taskId);
+        render();
+        showToast(`Asset "${task.assetName}" deleted.`);
+      }
+    });
   }
 
   function handleAddStoreSubmit(e) {
@@ -1790,26 +1868,33 @@
         return;
       }
 
-      if (confirm(`Reopen task "${task.assetName}"?`)) {
-        task.completedAt = null;
-        task.status = calculateTaskStatus(task);
-        
-        task.comments = task.comments || [];
-        task.comments.push({
-          id: 'c-' + Date.now(),
-          author: getCurrentUserLabel(),
-          role: isAdmin() ? 'admin' : 'store',
-          text: `Task reopened by ${getCurrentUserLabel()}.`,
-          timestamp: new Date().toISOString()
-        });
-        showToast(`Task reopened: ${task.assetName}`);
-        saveState();
-        syncTaskToCloud(task);
-        render();
-        if (state.activeDrawerTaskId === taskId) {
-          openCommentsDrawer(taskId);
+      showConfirmModal({
+        title: 'Reopen Task?',
+        message: `Are you sure you want to reopen <strong>"${escapeHTML(task.assetName)}"</strong> (${escapeHTML(task.store)})?<br><br><small style="color: var(--text-muted);">This will reset its completed status so the store can perform new maintenance, upload fresh photo verification, and update remarks.</small>`,
+        iconType: 'primary',
+        okText: 'Yes, Reopen Task',
+        okClass: 'btn-primary',
+        onConfirm: () => {
+          task.completedAt = null;
+          task.status = calculateTaskStatus(task);
+
+          task.comments = task.comments || [];
+          task.comments.push({
+            id: 'c-' + Date.now(),
+            author: getCurrentUserLabel(),
+            role: isAdmin() ? 'admin' : 'store',
+            text: `Task reopened by ${getCurrentUserLabel()}.`,
+            timestamp: new Date().toISOString()
+          });
+          showToast(`Task reopened: ${task.assetName}`);
+          saveState();
+          syncTaskToCloud(task);
+          render();
+          if (state.activeDrawerTaskId === taskId) {
+            openCommentsDrawer(taskId);
+          }
         }
-      }
+      });
       return;
     }
 
@@ -1889,7 +1974,7 @@
     el.completionAssetName.textContent = task.assetName;
     el.completionAssetCategory.textContent = task.category;
     el.completionAssetLocation.textContent = `${task.store} • ${task.location}`;
-    
+
     // Pre-fill completion date with today
     el.completionDateInput.value = TODAY_STR;
 
@@ -2146,14 +2231,14 @@
     syncCategoryOptions();
     syncConditionOptions();
     closeSidebar();
-    
+
     if (taskId) {
       const task = state.tasks.find(t => t.id === taskId);
       if (!task) return;
       el.modalTitle.textContent = 'Edit Asset Task';
       el.formTaskId.value = task.id;
       el.formAssetName.value = task.assetName || '';
-      
+
       // Ensure category exists in list
       if (task.category && !state.categories.includes(task.category)) {
         state.categories.push(task.category);
@@ -2200,7 +2285,7 @@
       el.formCondition.value = state.conditions[0] || 'Excellent';
       el.formPriority.value = 'Medium';
       el.formStatusOverride.value = 'auto';
-      
+
       const autoNext = calculateNextCycleDate(TODAY_STR, 'Monthly');
       el.formNextCycleDate.value = autoNext || '';
     }
@@ -2232,8 +2317,8 @@
     el.drawerAssetMeta.textContent = `${task.store} • ${task.serialNumber ? '#' + task.serialNumber : task.category}`;
     el.drawerStatusBadge.textContent = meta.label;
     el.drawerStatusBadge.className = `status-chip ${meta.className}`;
-    el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt) 
-      ? `Completed: ${formatDateDisplay(task.completedAt)}` 
+    el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt)
+      ? `Completed: ${formatDateDisplay(task.completedAt)}`
       : `Due: ${formatDateDisplay(task.dueDate)}`;
     el.drawerConditionBadge.textContent = `Condition: ${task.condition}`;
 
@@ -2331,7 +2416,7 @@
       if (el.drawerProofTitle) {
         el.drawerProofTitle.textContent = `Verified Maintenance Photo (${formatDateDisplay(selected.date)})`;
       }
-      
+
       if (el.drawerGalleryStrip) {
         const thumbItems = el.drawerGalleryStrip.querySelectorAll('.gallery-thumb-item');
         thumbItems.forEach((t, i) => {
@@ -2937,9 +3022,17 @@
     });
     el.commentForm.addEventListener('submit', handleCommentSubmit);
 
+    // Confirmation Modal
+    if (el.confirmModal) {
+      el.confirmModal.addEventListener('click', (e) => {
+        if (e.target === el.confirmModal) closeConfirmModal();
+      });
+    }
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeSidebar();
+        if (el.confirmModal && el.confirmModal.classList.contains('open')) closeConfirmModal();
         if (el.storeManagementModal.classList.contains('open')) closeStoreManagementModal();
         if (el.lightboxModal.classList.contains('open')) closeLightbox();
         if (el.completionModal.classList.contains('open')) closeCompletionModal();

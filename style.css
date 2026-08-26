@@ -11,7 +11,7 @@
   --border-color: #E2E8F0;
   --border-subtle: #EDF2F7;
   --border-focus: #2563EB;
-  
+
   /* Text & Hierarchy */
   --text-main: #0F172A;
   --text-muted: #64748B;
@@ -70,7 +70,7 @@
   /* Typography */
   --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  
+
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -78,7 +78,9 @@
 /* ==========================================================================
    Reset & Base
    ========================================================================== */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -101,7 +103,10 @@ body {
   overflow-x: hidden;
 }
 
-input, button, select, textarea {
+input,
+button,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
 }
@@ -137,8 +142,15 @@ button {
 }
 
 @keyframes authFadeIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .auth-brand {
@@ -514,11 +526,30 @@ button {
   color: #1D4ED8;
 }
 
-.badge-overdue { background: #FEF2F2; color: #DC2626; }
-.badge-due-today { background: #EFF6FF; color: #2563EB; }
-.badge-due-soon { background: #FFFBEB; color: #D97706; }
-.badge-upcoming { background: #F1F5F9; color: #475569; }
-.badge-completed { background: #ECFDF5; color: #059669; }
+.badge-overdue {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.badge-due-today {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+.badge-due-soon {
+  background: #FFFBEB;
+  color: #D97706;
+}
+
+.badge-upcoming {
+  background: #F1F5F9;
+  color: #475569;
+}
+
+.badge-completed {
+  background: #ECFDF5;
+  color: #059669;
+}
 
 .sidebar-action-btn {
   width: 100%;
@@ -701,12 +732,29 @@ button {
   border-radius: var(--radius-full);
 }
 
-.kpi-bar-total { background: #0F172A; }
-.kpi-bar-overdue { background: var(--status-overdue-color); }
-.kpi-bar-due-today { background: var(--status-due-today-color); }
-.kpi-bar-due-soon { background: var(--status-due-soon-color); }
-.kpi-bar-upcoming { background: var(--status-upcoming-color); }
-.kpi-bar-completed { background: var(--status-completed-color); }
+.kpi-bar-total {
+  background: #0F172A;
+}
+
+.kpi-bar-overdue {
+  background: var(--status-overdue-color);
+}
+
+.kpi-bar-due-today {
+  background: var(--status-due-today-color);
+}
+
+.kpi-bar-due-soon {
+  background: var(--status-due-soon-color);
+}
+
+.kpi-bar-upcoming {
+  background: var(--status-upcoming-color);
+}
+
+.kpi-bar-completed {
+  background: var(--status-completed-color);
+}
 
 /* ==========================================================================
    Toolbar & Filtering Controls
@@ -776,7 +824,8 @@ button {
   flex-wrap: wrap;
 }
 
-.select-filter, .input-select {
+.select-filter,
+.input-select {
   height: 38px;
   padding: 6px 30px 6px 12px;
   background-color: var(--bg-surface);
@@ -795,7 +844,8 @@ button {
   transition: border-color var(--transition-fast);
 }
 
-.select-filter:focus, .input-select:focus {
+.select-filter:focus,
+.input-select:focus {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
@@ -983,7 +1033,11 @@ button {
   color: var(--status-overdue-color);
   border: 1px solid var(--status-overdue-border);
 }
-.dot-overdue { background: var(--status-overdue-color); box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2); }
+
+.dot-overdue {
+  background: var(--status-overdue-color);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
 
 /* 2. Due Today - Blue */
 .chip-due-today {
@@ -991,7 +1045,11 @@ button {
   color: var(--status-due-today-color);
   border: 1px solid var(--status-due-today-border);
 }
-.dot-due-today { background: var(--status-due-today-color); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2); }
+
+.dot-due-today {
+  background: var(--status-due-today-color);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
 
 /* 3. Due Soon - Orange */
 .chip-due-soon {
@@ -999,7 +1057,11 @@ button {
   color: var(--status-due-soon-color);
   border: 1px solid var(--status-due-soon-border);
 }
-.dot-due-soon { background: var(--status-due-soon-color); box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2); }
+
+.dot-due-soon {
+  background: var(--status-due-soon-color);
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+}
 
 /* 4. Upcoming - Gray */
 .chip-upcoming {
@@ -1007,7 +1069,10 @@ button {
   color: var(--status-upcoming-color);
   border: 1px solid var(--status-upcoming-border);
 }
-.dot-upcoming { background: var(--status-upcoming-color); }
+
+.dot-upcoming {
+  background: var(--status-upcoming-color);
+}
 
 /* 5. Completed - Green */
 .chip-completed {
@@ -1015,7 +1080,11 @@ button {
   color: var(--status-completed-color);
   border: 1px solid var(--status-completed-border);
 }
-.dot-completed { background: var(--status-completed-color); box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2); }
+
+.dot-completed {
+  background: var(--status-completed-color);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
 
 /* Condition Badges */
 .condition-tag {
@@ -1026,12 +1095,36 @@ button {
   font-weight: 600;
 }
 
-.cond-excellent { background: #ECFDF5; color: #047857; }
-.cond-good { background: #EFF6FF; color: #1D4ED8; }
-.cond-fair { background: #FEF3C7; color: #B45309; }
-.cond-repair { background: #FEE2E2; color: #B91C1C; }
-.cond-critical { background: #7F1D1D; color: #FFFFFF; }
-.cond-custom { background: #F3E8FF; color: #7E22CE; border: 1px solid #E9D5FF; }
+.cond-excellent {
+  background: #ECFDF5;
+  color: #047857;
+}
+
+.cond-good {
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
+
+.cond-fair {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.cond-repair {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+.cond-critical {
+  background: #7F1D1D;
+  color: #FFFFFF;
+}
+
+.cond-custom {
+  background: #F3E8FF;
+  color: #7E22CE;
+  border: 1px solid #E9D5FF;
+}
 
 /* ==========================================================================
    Task Card Grid Layout
@@ -1226,19 +1319,8 @@ button {
 .task-footer-right {
   display: flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: nowrap;
-}
-
-.task-footer-right .btn-sm {
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: 600;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .completed-lock-badge {
@@ -1521,7 +1603,8 @@ button {
   margin-left: 4px;
 }
 
-.input-text, .input-textarea {
+.input-text,
+.input-textarea {
   width: 100%;
   padding: 8px 12px;
   background: var(--bg-surface);
@@ -1533,7 +1616,8 @@ button {
   transition: all var(--transition-fast);
 }
 
-.input-text:focus, .input-textarea:focus {
+.input-text:focus,
+.input-textarea:focus {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
@@ -1555,16 +1639,19 @@ button {
 }
 
 /* Drag and Drop Task Reordering */
-.task-card[draggable="true"], .task-table tbody tr[draggable="true"] {
+.task-card[draggable="true"],
+.task-table tbody tr[draggable="true"] {
   cursor: grab;
   transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
 }
 
-.task-card[draggable="true"]:active, .task-table tbody tr[draggable="true"]:active {
+.task-card[draggable="true"]:active,
+.task-table tbody tr[draggable="true"]:active {
   cursor: grabbing;
 }
 
-.task-card.is-dragging, .task-table tbody tr.is-dragging {
+.task-card.is-dragging,
+.task-table tbody tr.is-dragging {
   opacity: 0.45;
   border: 2px dashed #2563EB !important;
   box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
@@ -1581,7 +1668,7 @@ button {
   gap: 3px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(0,0,0,0.03);
+  background: rgba(0, 0, 0, 0.03);
   transition: background 0.15s ease;
 }
 
@@ -1745,7 +1832,7 @@ button {
 
 .calendar-event-pill:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .calendar-event-pill.pill-overdue {
@@ -2107,9 +2194,21 @@ button {
   font-weight: 600;
 }
 
-.role-admin { background: #EFF6FF; color: #1D4ED8; }
-.role-store { background: #ECFDF5; color: #047857; }
-.badge-verified { background: #DCFCE7; color: #15803D; border: 1px solid #86EFAC; }
+.role-admin {
+  background: #EFF6FF;
+  color: #1D4ED8;
+}
+
+.role-store {
+  background: #ECFDF5;
+  color: #047857;
+}
+
+.badge-verified {
+  background: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #86EFAC;
+}
 
 .comment-time {
   color: var(--text-subtle);
@@ -2213,7 +2312,8 @@ button {
   background: #000;
 }
 
-.gallery-thumb-item:hover, .gallery-thumb-item.active {
+.gallery-thumb-item:hover,
+.gallery-thumb-item.active {
   border-color: #2563EB;
   transform: scale(1.05);
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
@@ -2319,8 +2419,15 @@ button {
 }
 
 @keyframes toastFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .toast-icon {
@@ -2453,7 +2560,8 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .form-grid, .add-store-grid {
+  .form-grid,
+  .add-store-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2480,7 +2588,9 @@ button {
     max-height: 95vh;
   }
 
-  .modal-header, .modal-body, .modal-footer {
+  .modal-header,
+  .modal-body,
+  .modal-footer {
     padding: 14px 16px;
   }
 
@@ -2490,4 +2600,65 @@ button {
     bottom: 16px;
     justify-content: center;
   }
+}
+
+/* Confirmation Modal Card */
+.confirm-modal-card {
+  max-width: 420px;
+  width: 90%;
+  padding: 24px;
+  text-align: center;
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-xl);
+  background: var(--bg-surface);
+}
+
+.confirm-modal-icon-wrapper {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #EFF6FF;
+  color: #2563EB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.confirm-modal-icon-wrapper.danger {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.confirm-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.confirm-modal-message {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.confirm-modal-actions .btn {
+  flex: 1;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
 }
