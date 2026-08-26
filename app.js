@@ -690,6 +690,19 @@
     btnConfirmCancel: document.getElementById('btn-confirm-cancel'),
     btnConfirmOk: document.getElementById('btn-confirm-ok'),
 
+    // Export Reports Modal
+    btnOpenExport: document.getElementById('btn-open-export'),
+    exportModal: document.getElementById('export-modal'),
+    btnExportClose: document.getElementById('btn-export-close'),
+    btnExportCancel: document.getElementById('btn-export-cancel'),
+    exportScopeSelect: document.getElementById('export-scope-select'),
+    exportTargetStore: document.getElementById('export-target-store'),
+    exportItemCount: document.getElementById('export-item-count'),
+    exportComplianceRate: document.getElementById('export-compliance-rate'),
+    exportGeneratedBy: document.getElementById('export-generated-by'),
+    btnExportPdf: document.getElementById('btn-export-pdf'),
+    btnExportCsv: document.getElementById('btn-export-csv'),
+
     // Toast
     toast: document.getElementById('toast'),
     toastMessage: document.getElementById('toast-message')
@@ -946,6 +959,277 @@
         openCommentsDrawer(taskId);
       }
     }
+  }
+
+  // =========================================================================
+  // 1-Click Audit & Compliance PDF and Excel/CSV Reports
+  // =========================================================================
+
+  function getExportDataset(scope = 'filtered') {
+    const baseTasks = isAdmin()
+      ? state.tasks
+      : state.tasks.filter(t => t.store === state.auth.store);
+
+    if (scope === 'filtered') {
+      return getFilteredTasks();
+    } else if (scope === 'completed') {
+      return baseTasks.filter(t => t.status === 'Completed' || t.completedAt);
+    } else if (scope === 'overdue') {
+      return baseTasks.filter(t => t.status !== 'Completed' && !t.completedAt);
+    }
+    return baseTasks;
+  }
+
+  function updateExportPreview() {
+    if (!el.exportModal) return;
+    const scope = el.exportScopeSelect ? el.exportScopeSelect.value : 'filtered';
+    const tasks = getExportDataset(scope);
+
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.status === 'Completed' || t.completedAt).length;
+    const rate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    if (el.exportItemCount) el.exportItemCount.textContent = `${totalTasks} items`;
+    if (el.exportComplianceRate) el.exportComplianceRate.textContent = `${rate}% (${completedTasks} completed)`;
+    if (el.exportTargetStore) {
+      el.exportTargetStore.textContent = !isAdmin()
+        ? state.auth.store
+        : (state.filterStore === 'all' ? 'All Stores (Global)' : state.filterStore);
+    }
+    if (el.exportGeneratedBy) {
+      el.exportGeneratedBy.textContent = getCurrentUserLabel();
+    }
+  }
+
+  function openExportModal() {
+    if (!el.exportModal) return;
+    updateExportPreview();
+    el.exportModal.classList.add('open');
+    el.exportModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeExportModal() {
+    if (!el.exportModal) return;
+    el.exportModal.classList.remove('open');
+    el.exportModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function exportToCSV() {
+    const scope = el.exportScopeSelect ? el.exportScopeSelect.value : 'filtered';
+    const tasks = getExportDataset(scope);
+
+    if (tasks.length === 0) {
+      alert('No tasks match the selected export scope.');
+      return;
+    }
+
+    const headers = [
+      'Task ID',
+      'Asset Name',
+      'Category',
+      'Assigned Store',
+      'Location',
+      'Serial Number',
+      'Maintenance Cycle',
+      'Scheduled Due Date',
+      'Completed Date',
+      'Status',
+      'Asset Condition',
+      'Performed By (Staff Name)',
+      'Estimated Value/Cost ($)',
+      'Completion Remarks',
+      'Verified Photo Evidence URL',
+      'Total Remarks Logged'
+    ];
+
+    const rows = tasks.map(t => {
+      const isComplete = t.status === 'Completed' || Boolean(t.completedAt);
+      const commentsCount = (t.comments && t.comments.length) || 0;
+      const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => c.proofImage)?.proofImage) || '';
+
+      return [
+        t.id,
+        t.assetName,
+        t.category,
+        t.store,
+        t.location,
+        t.serialNumber || 'N/A',
+        t.cycle,
+        t.dueDate,
+        t.completedAt || 'Pending',
+        t.status,
+        t.condition,
+        t.completedBy || (isComplete ? 'Store Staff' : 'Not Completed'),
+        t.estimatedCost != null ? `$${t.estimatedCost}` : '—',
+        t.completionRemarks || '—',
+        latestPhoto,
+        commentsCount
+      ].map(field => `"${String(field || '').replace(/"/g, '""')}"`);
+    });
+
+    const csvContent = '\uFEFF' + [headers.map(h => `"${h}"`).join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    const dateStamp = new Date().toISOString().split('T')[0];
+    const storePrefix = !isAdmin() ? state.auth.store.replace(/\s+/g, '_') : 'AllStores';
+    downloadLink.href = url;
+    downloadLink.download = `AssetFlow_Audit_Report_${storePrefix}_${dateStamp}.csv`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+
+    closeExportModal();
+    showToast(`Downloaded CSV Audit Report (${tasks.length} items)`);
+  }
+
+  function generatePDFReport() {
+    const scope = el.exportScopeSelect ? el.exportScopeSelect.value : 'filtered';
+    const tasks = getExportDataset(scope);
+
+    if (tasks.length === 0) {
+      alert('No tasks match the selected export scope.');
+      return;
+    }
+
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.status === 'Completed' || t.completedAt).length;
+    const overdueTasks = tasks.filter(t => t.status === 'Overdue').length;
+    const complianceRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    const excellentCount = tasks.filter(t => t.condition === 'Excellent').length;
+    const goodCount = tasks.filter(t => t.condition === 'Good').length;
+    const needsRepairCount = tasks.filter(t => t.condition === 'Needs Repair' || t.condition === 'Critical').length;
+
+    const targetStoreText = !isAdmin() ? state.auth.store : (state.filterStore === 'all' ? 'All Stores (Global)' : state.filterStore);
+    const dateFormatted = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+    let container = document.getElementById('audit-print-report-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'audit-print-report-container';
+      document.body.appendChild(container);
+    }
+
+    const tableRowsHtml = tasks.map((t, idx) => {
+      const isComplete = t.status === 'Completed' || Boolean(t.completedAt);
+      const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => c.proofImage)?.proofImage) || '';
+      const performer = t.completedBy || (isComplete ? 'Store Staff' : '—');
+      const remarks = t.completionRemarks || (t.comments && t.comments.length ? t.comments[t.comments.length - 1].text : '—');
+
+      return `
+        <tr>
+          <td><strong>#${idx + 1}</strong></td>
+          <td>
+            <strong>${escapeHTML(t.assetName)}</strong>
+            ${t.serialNumber ? `<br><small style="color: #64748B;">SN: ${escapeHTML(t.serialNumber)}</small>` : ''}
+          </td>
+          <td>${escapeHTML(t.category)}</td>
+          <td>${escapeHTML(t.store)}<br><small style="color: #64748B;">${escapeHTML(t.location)}</small></td>
+          <td>${escapeHTML(t.cycle)}</td>
+          <td>${formatDateDisplay(t.dueDate)}</td>
+          <td>${isComplete ? formatDateDisplay(t.completedAt) : '<span style="color: #DC2626;">Pending</span>'}</td>
+          <td><strong style="color: #0F172A;">${escapeHTML(performer)}</strong></td>
+          <td>
+            <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 10.5px; background: ${t.condition === 'Excellent' ? '#DCFCE7; color: #15803D' : (t.condition === 'Good' ? '#E0F2FE; color: #0369A1' : '#FEE2E2; color: #DC2626')};">
+              ${escapeHTML(t.condition)}
+            </span>
+          </td>
+          <td style="max-width: 180px; word-break: break-word;">${escapeHTML(remarks)}</td>
+          <td style="text-align: center;">
+            ${latestPhoto ? `<img src="${latestPhoto}" alt="Proof" class="audit-proof-thumb">` : '<span style="color: #94A3B8; font-size: 10px;">No photo</span>'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    container.innerHTML = `
+      <div class="audit-report-wrapper">
+        <div class="audit-report-header">
+          <div class="audit-report-brand">
+            <div class="audit-report-brand-icon">AF</div>
+            <div>
+              <h1 class="audit-report-title">AssetFlow &bull; Maintenance &amp; Compliance Audit Report</h1>
+              <p class="audit-report-subtitle">Official Equipment Preventive Maintenance Inspection Log &amp; Safety Compliance Record</p>
+            </div>
+          </div>
+          <div class="audit-report-meta">
+            <div><strong>Generated Date:</strong> ${dateFormatted}</div>
+            <div><strong>Audited Facility:</strong> ${escapeHTML(targetStoreText)}</div>
+            <div><strong>Report Generated By:</strong> ${escapeHTML(getCurrentUserLabel())}</div>
+          </div>
+        </div>
+
+        <div class="audit-kpi-summary-box">
+          <div class="audit-kpi-card">
+            <div class="audit-kpi-label">Total Assets Inspected</div>
+            <div class="audit-kpi-val">${totalTasks}</div>
+          </div>
+          <div class="audit-kpi-card">
+            <div class="audit-kpi-label">Compliance / Completion Rate</div>
+            <div class="audit-kpi-val" style="color: #10B981;">${complianceRate}%</div>
+          </div>
+          <div class="audit-kpi-card">
+            <div class="audit-kpi-label">Overdue Maintenance</div>
+            <div class="audit-kpi-val" style="color: ${overdueTasks > 0 ? '#DC2626' : '#10B981'};">${overdueTasks}</div>
+          </div>
+          <div class="audit-kpi-card">
+            <div class="audit-kpi-label">Equipment Condition Rating</div>
+            <div class="audit-kpi-val" style="font-size: 14px; margin-top: 6px;">
+              <span style="color: #16A34A;">${excellentCount} Exc</span> &bull; 
+              <span style="color: #0284C7;">${goodCount} Good</span> &bull; 
+              <span style="color: #DC2626;">${needsRepairCount} Rep</span>
+            </div>
+          </div>
+        </div>
+
+        <table class="audit-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Asset &amp; Serial ID</th>
+              <th>Category</th>
+              <th>Store Location</th>
+              <th>Cycle</th>
+              <th>Scheduled</th>
+              <th>Completed</th>
+              <th>Performed By</th>
+              <th>Condition</th>
+              <th>Remarks / Work Done</th>
+              <th>Proof Photo</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRowsHtml}
+          </tbody>
+        </table>
+
+        <div class="audit-signoff-section">
+          <div class="audit-signoff-box">
+            <div class="audit-signoff-title">STORE MANAGER VERIFICATION SIGN-OFF</div>
+            <div class="audit-signature-line"></div>
+            <div class="audit-signature-meta">
+              <span>Signature: __________________________</span>
+              <span>Date: ____ / ____ / ________</span>
+            </div>
+          </div>
+          <div class="audit-signoff-box">
+            <div class="audit-signoff-title">COMPLIANCE AUDITOR / INSPECTOR SIGN-OFF</div>
+            <div class="audit-signature-line"></div>
+            <div class="audit-signature-meta">
+              <span>Signature: __________________________</span>
+              <span>Date: ____ / ____ / ________</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    closeExportModal();
+    setTimeout(() => {
+      window.print();
+    }, 150);
   }
 
   // Populate dynamic store dropdowns
@@ -3370,10 +3654,36 @@
       closeNotificationDropdown();
     });
 
+    // Export Reports Event Listeners
+    if (el.btnOpenExport) {
+      el.btnOpenExport.addEventListener('click', openExportModal);
+    }
+    if (el.btnExportClose) {
+      el.btnExportClose.addEventListener('click', closeExportModal);
+    }
+    if (el.btnExportCancel) {
+      el.btnExportCancel.addEventListener('click', closeExportModal);
+    }
+    if (el.exportScopeSelect) {
+      el.exportScopeSelect.addEventListener('change', updateExportPreview);
+    }
+    if (el.btnExportCsv) {
+      el.btnExportCsv.addEventListener('click', exportToCSV);
+    }
+    if (el.btnExportPdf) {
+      el.btnExportPdf.addEventListener('click', generatePDFReport);
+    }
+    if (el.exportModal) {
+      el.exportModal.addEventListener('click', (e) => {
+        if (e.target === el.exportModal) closeExportModal();
+      });
+    }
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeSidebar();
         closeNotificationDropdown();
+        if (el.exportModal && el.exportModal.classList.contains('open')) closeExportModal();
         if (el.confirmModal && el.confirmModal.classList.contains('open')) closeConfirmModal();
         if (el.storeManagementModal.classList.contains('open')) closeStoreManagementModal();
         if (el.lightboxModal.classList.contains('open')) closeLightbox();
@@ -3477,7 +3787,11 @@
     handleNotificationClick: handleNotificationClick,
     markNotificationRead: markNotificationRead,
     markAllNotificationsRead: markAllNotificationsRead,
-    clearNotifications: clearNotifications
+    clearNotifications: clearNotifications,
+    openExportModal: openExportModal,
+    closeExportModal: closeExportModal,
+    exportToCSV: exportToCSV,
+    generatePDFReport: generatePDFReport
   };
 
   if (document.readyState === 'loading') {

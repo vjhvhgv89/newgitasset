@@ -2839,3 +2839,197 @@ button {
   align-items: center;
   gap: 8px;
 }
+
+/* =========================================================================
+   Print / Audit & Compliance PDF Styles
+   ========================================================================= */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #audit-print-report-container,
+  #audit-print-report-container * {
+    visibility: visible;
+  }
+
+  #audit-print-report-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 24px;
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    font-family: var(--font-sans);
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-page-break {
+    page-break-after: auto;
+  }
+}
+
+.audit-report-wrapper {
+  background: #FFFFFF;
+  color: #0F172A;
+  font-family: var(--font-sans);
+  padding: 32px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.audit-report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid #0F172A;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.audit-report-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audit-report-brand-icon {
+  width: 38px;
+  height: 38px;
+  background: #2563EB;
+  color: #FFFFFF;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 20px;
+}
+
+.audit-report-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+}
+
+.audit-report-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  margin: 2px 0 0 0;
+}
+
+.audit-report-meta {
+  text-align: right;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.audit-kpi-summary-box {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.audit-kpi-card {
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #F8FAFC;
+}
+
+.audit-kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.audit-kpi-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0F172A;
+  margin-top: 4px;
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  margin-bottom: 30px;
+}
+
+.audit-table th {
+  background: #F1F5F9;
+  color: #1E293B;
+  font-weight: 700;
+  text-align: left;
+  padding: 9px 10px;
+  border: 1px solid #CBD5E1;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.audit-table td {
+  padding: 8px 10px;
+  border: 1px solid #E2E8F0;
+  vertical-align: top;
+  line-height: 1.4;
+}
+
+.audit-table tr:nth-child(even) {
+  background: #FAFAFA;
+}
+
+.audit-proof-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #CBD5E1;
+}
+
+.audit-signoff-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-top: 36px;
+  padding-top: 20px;
+  border-top: 1px dashed #94A3B8;
+}
+
+.audit-signoff-box {
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  padding: 16px;
+  background: #FAFAFA;
+}
+
+.audit-signoff-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1E293B;
+  margin-bottom: 12px;
+}
+
+.audit-signature-line {
+  border-bottom: 1px solid #64748B;
+  height: 32px;
+  margin-bottom: 8px;
+}
+
+.audit-signature-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #64748B;
+}
