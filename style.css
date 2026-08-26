@@ -2215,7 +2215,7 @@ button {
 }
 
 .drawer-footer {
-  padding: 16px 20px;
+  padding: 16px 20px 65px 20px;
   border-top: 1px solid var(--border-color);
   background: var(--bg-surface-subtle);
 }
@@ -2249,6 +2249,7 @@ button {
 .comment-submit-row {
   display: flex;
   justify-content: flex-end;
+  margin-bottom: 10px;
 }
 
 /* Lightbox Modal */
