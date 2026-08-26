@@ -932,13 +932,18 @@
       el.viewCaption.textContent = 'Admin Mode: Create, assign, edit, override status, manage store credentials, and review verification proofs in real-time.';
     } else {
       const storeName = state.auth.store || 'Store Account';
-      const storeAccount = state.storeAccounts.find(s => s.name === storeName);
+      const storeAccount = state.storeAccounts.find(s => s.name === storeName || s.code === storeName);
+      
       const managerContact = (storeAccount && storeAccount.manager && storeAccount.manager.trim()) 
         ? storeAccount.manager.trim() 
         : 'Store Staff / Operator';
 
-      el.userDisplayName.textContent = storeName;
-      el.userRoleLabel.textContent = managerContact;
+      const storeCode = (storeAccount && storeAccount.code && storeAccount.code.trim())
+        ? storeAccount.code.trim()
+        : storeName;
+
+      el.userDisplayName.textContent = managerContact;
+      el.userRoleLabel.textContent = storeCode;
       el.roleDot.style.backgroundColor = '#10B981';
       if (el.mobileRoleDot) el.mobileRoleDot.style.backgroundColor = '#10B981';
       el.adminStoreSwitcherWrapper.classList.add('hidden');
