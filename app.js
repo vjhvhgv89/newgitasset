@@ -1341,26 +1341,47 @@
       return;
     }
 
-    el.storeAccountsTbody.innerHTML = state.storeAccounts.map((s, idx) => `
-      <tr>
+  function renderStoreAccountsList() {
+    if (!state.storeAccounts) state.storeAccounts = [];
+    
+    // Ensure every store account has a unique ID
+    state.storeAccounts.forEach((s, idx) => {
+      if (!s.id) {
+        s.id = 'store-' + Date.now() + '-' + idx + '-' + Math.random().toString(36).substring(2, 7);
+      }
+    });
+
+    if (state.storeAccounts.length === 0) {
+      el.storeAccountsTbody.innerHTML = `
+        <tr>
+          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+            No store branches configured yet. Use the form below to add your first store.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    el.storeAccountsTbody.innerHTML = state.storeAccounts.map((s) => `
+      <tr data-store-id="${escapeHTML(s.id)}">
         <td>
-          <input type="text" class="input-text input-sm" id="store-name-input-${idx}" value="${escapeHTML(s.name)}" placeholder="Store Name" required style="min-width: 140px; font-weight: 600;">
+          <input type="text" class="input-text input-sm" id="store-name-input-${escapeHTML(s.id)}" value="${escapeHTML(s.name)}" placeholder="Store Name" required style="min-width: 140px; font-weight: 600;">
         </td>
         <td>
-          <input type="text" class="input-text input-sm" id="store-code-input-${idx}" value="${escapeHTML(s.code || '')}" placeholder="Code" style="min-width: 80px; text-transform: uppercase;">
+          <input type="text" class="input-text input-sm" id="store-code-input-${escapeHTML(s.id)}" value="${escapeHTML(s.code || '')}" placeholder="Code" style="min-width: 80px; text-transform: uppercase;">
         </td>
         <td>
-          <input type="text" class="input-text input-sm" id="store-manager-input-${idx}" value="${escapeHTML(s.manager || '')}" placeholder="Manager / Contact" style="min-width: 150px;">
+          <input type="text" class="input-text input-sm" id="store-manager-input-${escapeHTML(s.id)}" value="${escapeHTML(s.manager || '')}" placeholder="Manager / Contact" style="min-width: 150px;">
         </td>
         <td>
-          <input type="text" class="input-text input-sm input-pin-inline" id="store-pin-input-${idx}" value="${escapeHTML(s.pin || '1234')}" placeholder="PIN" maxlength="12">
+          <input type="text" class="input-text input-sm input-pin-inline" id="store-pin-input-${escapeHTML(s.id)}" value="${escapeHTML(s.pin || '1234')}" placeholder="PIN" maxlength="12">
         </td>
         <td>
           <div style="display: flex; gap: 6px; align-items: center;">
-            <button type="button" class="btn btn-secondary btn-sm" onclick="window.assetApp.updateStoreAccount(${idx})">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.assetApp.updateStoreAccount('${escapeHTML(s.id)}')">
               Save
             </button>
-            <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.deleteStoreAccount(${idx})" title="Remove Store Branch">
+            <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.deleteStoreAccount('${escapeHTML(s.id)}')" title="Remove Store Branch">
               Delete
             </button>
           </div>
@@ -1369,18 +1390,32 @@
     `).join('');
   }
 
-  function updateStoreAccount(index) {
+  function updateStoreAccount(storeIdOrIndex) {
     if (!isAdmin()) return;
-    const targetIdx = Number(index);
-    const store = state.storeAccounts[targetIdx];
-    if (!store) return;
+    
+    let store = state.storeAccounts.find(s => s.id === String(storeIdOrIndex));
+    if (!store && typeof storeIdOrIndex === 'number' && state.storeAccounts[storeIdOrIndex]) {
+      store = state.storeAccounts[storeIdOrIndex];
+    }
+    if (!store && typeof storeIdOrIndex === 'string' && !isNaN(Number(storeIdOrIndex))) {
+      store = state.storeAccounts[Number(storeIdOrIndex)];
+    }
 
-    const nameInput = document.getElementById(`store-name-input-${targetIdx}`);
-    const codeInput = document.getElementById(`store-code-input-${targetIdx}`);
-    const managerInput = document.getElementById(`store-manager-input-${targetIdx}`);
-    const pinInput = document.getElementById(`store-pin-input-${targetIdx}`);
+    if (!store) {
+      alert('Error: Store account not found.');
+      return;
+    }
 
-    if (!nameInput || !pinInput) return;
+    const sid = store.id;
+    const nameInput = document.getElementById(`store-name-input-${sid}`);
+    const codeInput = document.getElementById(`store-code-input-${sid}`);
+    const managerInput = document.getElementById(`store-manager-input-${sid}`);
+    const pinInput = document.getElementById(`store-pin-input-${sid}`);
+
+    if (!nameInput || !pinInput) {
+      alert('Error: Could not locate store input fields.');
+      return;
+    }
 
     const newName = nameInput.value.trim();
     const newCode = codeInput ? codeInput.value.trim() : (store.code || '');
@@ -1399,8 +1434,7 @@
       return;
     }
 
-    // Check duplicate store name if name was changed to another existing store
-    const duplicate = state.storeAccounts.some((s, idx) => Number(idx) !== targetIdx && s.name.toLowerCase() === newName.toLowerCase());
+    const duplicate = state.storeAccounts.some(s => s.id !== sid && s.name.toLowerCase() === newName.toLowerCase());
     if (duplicate) {
       alert(`A store branch with the name "${newName}" already exists.`);
       nameInput.focus();
@@ -1413,11 +1447,6 @@
     store.manager = newManager;
     store.pin = newPin;
 
-    if (!store.id) {
-      store.id = 'store-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
-    }
-
-    // If store name changed, update any existing tasks assigned to oldName
     if (oldName !== newName) {
       let updatedTaskCount = 0;
       state.tasks.forEach(t => {
@@ -1445,12 +1474,21 @@
     showToast(`Saved updated details for "${newName}"`);
   }
 
-  function updateStorePin(index) {
-    updateStoreAccount(index);
+  function updateStorePin(storeIdOrIndex) {
+    updateStoreAccount(storeIdOrIndex);
   }
 
-  function deleteStoreAccount(index) {
+  function deleteStoreAccount(storeIdOrIndex) {
     if (!isAdmin()) return;
+    
+    let index = state.storeAccounts.findIndex(s => s.id === String(storeIdOrIndex));
+    if (index === -1 && typeof storeIdOrIndex === 'number') {
+      index = storeIdOrIndex;
+    }
+    if (index === -1 && typeof storeIdOrIndex === 'string' && !isNaN(Number(storeIdOrIndex))) {
+      index = Number(storeIdOrIndex);
+    }
+
     const targetStore = state.storeAccounts[index];
     if (!targetStore) return;
 
@@ -2697,6 +2735,7 @@
     startNextCycleEarly: startNextCycleEarly,
     useSamplePhoto: useSamplePhoto,
     openLightbox: openLightbox,
+    updateStoreAccount: updateStoreAccount,
     updateStorePin: updateStorePin,
     deleteStoreAccount: deleteStoreAccount,
     deleteTask: deleteTask,
