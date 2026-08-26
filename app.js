@@ -255,6 +255,9 @@
 
   function syncStoreToCloud(store) {
     if (!isFirebaseReady || !db) return;
+    if (!store.id) {
+      store.id = 'store-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    }
     db.collection('stores').doc(store.id).set(store).catch(err => {
       console.warn('Error saving store to Firebase:', err);
     });
@@ -1354,10 +1357,10 @@
         </td>
         <td>
           <div style="display: flex; gap: 6px; align-items: center;">
-            <button class="btn btn-secondary btn-sm" onclick="window.assetApp.updateStoreAccount(${idx})">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="window.assetApp.updateStoreAccount(${idx})">
               Save
             </button>
-            <button class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.deleteStoreAccount(${idx})" title="Remove Store Branch">
+            <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.deleteStoreAccount(${idx})" title="Remove Store Branch">
               Delete
             </button>
           </div>
@@ -1368,19 +1371,20 @@
 
   function updateStoreAccount(index) {
     if (!isAdmin()) return;
-    const store = state.storeAccounts[index];
+    const targetIdx = Number(index);
+    const store = state.storeAccounts[targetIdx];
     if (!store) return;
 
-    const nameInput = document.getElementById(`store-name-input-${index}`);
-    const codeInput = document.getElementById(`store-code-input-${index}`);
-    const managerInput = document.getElementById(`store-manager-input-${index}`);
-    const pinInput = document.getElementById(`store-pin-input-${index}`);
+    const nameInput = document.getElementById(`store-name-input-${targetIdx}`);
+    const codeInput = document.getElementById(`store-code-input-${targetIdx}`);
+    const managerInput = document.getElementById(`store-manager-input-${targetIdx}`);
+    const pinInput = document.getElementById(`store-pin-input-${targetIdx}`);
 
     if (!nameInput || !pinInput) return;
 
     const newName = nameInput.value.trim();
-    const newCode = codeInput ? codeInput.value.trim() : store.code;
-    const newManager = managerInput ? managerInput.value.trim() : store.manager;
+    const newCode = codeInput ? codeInput.value.trim() : (store.code || '');
+    const newManager = managerInput ? managerInput.value.trim() : (store.manager || '');
     const newPin = pinInput.value.trim();
 
     if (!newName) {
@@ -1395,8 +1399,8 @@
       return;
     }
 
-    // Check duplicate store name if name was changed
-    const duplicate = state.storeAccounts.some((s, idx) => idx !== index && s.name.toLowerCase() === newName.toLowerCase());
+    // Check duplicate store name if name was changed to another existing store
+    const duplicate = state.storeAccounts.some((s, idx) => Number(idx) !== targetIdx && s.name.toLowerCase() === newName.toLowerCase());
     if (duplicate) {
       alert(`A store branch with the name "${newName}" already exists.`);
       nameInput.focus();
@@ -1408,6 +1412,10 @@
     store.code = newCode;
     store.manager = newManager;
     store.pin = newPin;
+
+    if (!store.id) {
+      store.id = 'store-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    }
 
     // If store name changed, update any existing tasks assigned to oldName
     if (oldName !== newName) {
@@ -1422,6 +1430,11 @@
       if (updatedTaskCount > 0) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
       }
+
+      if (state.auth.store === oldName) {
+        state.auth.store = newName;
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(state.auth));
+      }
     }
 
     saveState();
@@ -1429,7 +1442,7 @@
     syncStoreOptions();
     renderStoreAccountsList();
     render();
-    showToast(`Updated store details for "${newName}"`);
+    showToast(`Saved updated details for "${newName}"`);
   }
 
   function updateStorePin(index) {
