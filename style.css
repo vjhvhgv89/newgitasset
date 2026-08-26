@@ -1579,6 +1579,194 @@ button {
   color: #2563EB;
 }
 
+/* Interactive Calendar View Layout */
+.task-calendar-wrapper {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+  overflow: hidden;
+}
+
+.calendar-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.calendar-month-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.calendar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-weekdays-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+}
+
+.calendar-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.calendar-day-cell {
+  background: var(--bg-surface-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  min-height: 105px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.calendar-day-cell:hover {
+  border-color: var(--border-focus);
+  background: var(--bg-surface);
+}
+
+.calendar-day-cell.other-month {
+  opacity: 0.45;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.calendar-day-cell.is-today {
+  border: 2px solid #2563EB;
+  background: #EFF6FF;
+}
+
+.calendar-day-cell.drag-over {
+  background: #DBEAFE !important;
+  border: 2px dashed #2563EB !important;
+}
+
+.calendar-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.calendar-day-number {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.calendar-day-cell.is-today .calendar-day-number {
+  color: #FFFFFF;
+  background: #2563EB;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.btn-add-day-task {
+  opacity: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 3px;
+  transition: opacity 0.15s ease;
+}
+
+.calendar-day-cell:hover .btn-add-day-task {
+  opacity: 1;
+}
+
+.btn-add-day-task:hover {
+  color: #2563EB;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.calendar-events-container {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  max-height: 85px;
+}
+
+.calendar-event-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: transform 0.1s ease;
+}
+
+.calendar-event-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.calendar-event-pill.pill-overdue {
+  background: #FEE2E2;
+  color: #991B1B;
+  border-left: 3px solid #EF4444;
+}
+
+.calendar-event-pill.pill-due-today {
+  background: #DBEAFE;
+  color: #1E40AF;
+  border-left: 3px solid #3B82F6;
+}
+
+.calendar-event-pill.pill-due-soon {
+  background: #FFEDD5;
+  color: #9A3412;
+  border-left: 3px solid #F97316;
+}
+
+.calendar-event-pill.pill-upcoming {
+  background: #F1F5F9;
+  color: #475569;
+  border-left: 3px solid #94A3B8;
+}
+
+.calendar-event-pill.pill-completed {
+  background: #D1FAE5;
+  color: #065F46;
+  border-left: 3px solid #10B981;
+}
+
 .field-hint {
   font-size: 11.5px;
   color: var(--text-muted);

@@ -114,6 +114,8 @@
     searchQuery: '',
     sortBy: 'urgency',
     viewMode: 'grid',
+    calendarYear: 2026,
+    calendarMonth: 7,
     activeDrawerTaskId: null,
     
     // Completion Modal State
@@ -513,12 +515,19 @@
     activeStatusTag: document.getElementById('active-status-tag'),
     btnClearAllFilters: document.getElementById('btn-clear-all-filters'),
 
-    // View toggles
+    // View toggles & Calendar
     viewToggleGrid: document.getElementById('view-toggle-grid'),
     viewToggleTable: document.getElementById('view-toggle-table'),
+    viewToggleCalendar: document.getElementById('view-toggle-calendar'),
     taskGrid: document.getElementById('task-grid'),
     taskTableWrapper: document.getElementById('task-table-wrapper'),
     taskTableBody: document.getElementById('task-table-body'),
+    taskCalendarWrapper: document.getElementById('task-calendar-wrapper'),
+    calendarMonthTitle: document.getElementById('calendar-month-title'),
+    btnCalendarPrev: document.getElementById('btn-calendar-prev'),
+    btnCalendarToday: document.getElementById('btn-calendar-today'),
+    btnCalendarNext: document.getElementById('btn-calendar-next'),
+    calendarDaysGrid: document.getElementById('calendar-days-grid'),
     emptyState: document.getElementById('empty-state'),
     btnEmptyReset: document.getElementById('btn-empty-reset'),
 
@@ -1258,6 +1267,185 @@
     }).join('');
   }
 
+  // =========================================================================
+  // Interactive Calendar View Logic
+  // =========================================================================
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function renderCalendar(tasks) {
+    if (!el.calendarDaysGrid || !el.calendarMonthTitle) return;
+
+    const year = state.calendarYear || 2026;
+    const month = (state.calendarMonth !== undefined) ? state.calendarMonth : 7;
+
+    el.calendarMonthTitle.textContent = `${MONTH_NAMES[month]} ${year}`;
+
+    // First day of month (0 = Sun, 1 = Mon...) & total days count
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    // Map tasks by date YYYY-MM-DD
+    const taskMap = {};
+    tasks.forEach(t => {
+      const dateStr = (t.status === 'Completed' && t.completedAt) ? t.completedAt : t.dueDate;
+      if (dateStr) {
+        const cleanDate = String(dateStr).split('T')[0];
+        if (!taskMap[cleanDate]) taskMap[cleanDate] = [];
+        taskMap[cleanDate].push(t);
+      }
+    });
+
+    let gridHtml = '';
+
+    // Previous month padding days
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const prevDay = daysInPrevMonth - i;
+      const prevDate = new Date(year, month - 1, prevDay);
+      const y = prevDate.getFullYear();
+      const m = String(prevDate.getMonth() + 1).padStart(2, '0');
+      const d = String(prevDay).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      const dayTasks = taskMap[dateStr] || [];
+
+      gridHtml += renderCalendarDayCell(prevDay, dateStr, dayTasks, true, false);
+    }
+
+    // Current month days
+    for (let day = 1; day <= daysInMonth; day++) {
+      const y = year;
+      const m = String(month + 1).padStart(2, '0');
+      const d = String(day).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      const isToday = (dateStr === TODAY_STR);
+      const dayTasks = taskMap[dateStr] || [];
+
+      gridHtml += renderCalendarDayCell(day, dateStr, dayTasks, false, isToday);
+    }
+
+    // Next month padding days to complete 35 or 42 grid cells
+    const totalCellsSoFar = firstDay + daysInMonth;
+    const totalCellsNeeded = totalCellsSoFar > 35 ? 42 : 35;
+    const nextMonthPadding = totalCellsNeeded - totalCellsSoFar;
+
+    for (let day = 1; day <= nextMonthPadding; day++) {
+      const nextDate = new Date(year, month + 1, day);
+      const y = nextDate.getFullYear();
+      const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+      const d = String(day).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      const dayTasks = taskMap[dateStr] || [];
+
+      gridHtml += renderCalendarDayCell(day, dateStr, dayTasks, true, false);
+    }
+
+    el.calendarDaysGrid.innerHTML = gridHtml;
+    bindCalendarCellEvents();
+  }
+
+  function renderCalendarDayCell(dayNum, dateStr, dayTasks, isOtherMonth, isToday) {
+    const cellClass = `calendar-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'is-today' : ''}`;
+    
+    const taskPillsHtml = dayTasks.map(t => {
+      const status = (t.status === 'Completed') ? 'Completed' : calculateTaskStatus(t);
+      let pillClass = 'pill-upcoming';
+      if (status === 'Overdue') pillClass = 'pill-overdue';
+      else if (status === 'Due Today') pillClass = 'pill-due-today';
+      else if (status === 'Due Soon') pillClass = 'pill-due-soon';
+      else if (status === 'Completed') pillClass = 'pill-completed';
+
+      return `
+        <div class="calendar-event-pill ${pillClass}" draggable="true" data-task-id="${t.id}" onclick="event.stopPropagation(); window.assetApp.openComments('${t.id}')" title="${escapeHTML(t.assetName)} (${escapeHTML(t.store)}) • Status: ${status}">
+          <span style="font-weight:700;">•</span>
+          <span>${escapeHTML(t.assetName)}</span>
+        </div>
+      `;
+    }).join('');
+
+    const addBtnHtml = isAdmin() ? `
+      <button type="button" class="btn-add-day-task" onclick="event.stopPropagation(); window.assetApp.createTaskForDate('${dateStr}')" title="Schedule asset task on ${formatDateDisplay(dateStr)}">+</button>
+    ` : '';
+
+    return `
+      <div class="${cellClass}" data-calendar-date="${dateStr}">
+        <div class="calendar-day-header">
+          <span class="calendar-day-number">${dayNum}</span>
+          ${addBtnHtml}
+        </div>
+        <div class="calendar-events-container">
+          ${taskPillsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function bindCalendarCellEvents() {
+    if (!el.calendarDaysGrid) return;
+    const dayCells = el.calendarDaysGrid.querySelectorAll('.calendar-day-cell');
+    dayCells.forEach(cell => {
+      cell.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        cell.classList.add('drag-over');
+      });
+      cell.addEventListener('dragleave', () => {
+        cell.classList.remove('drag-over');
+      });
+      cell.addEventListener('drop', (e) => {
+        e.preventDefault();
+        cell.classList.remove('drag-over');
+        const targetDate = cell.getAttribute('data-calendar-date');
+        if (!targetDate || !draggedTaskId) return;
+
+        const task = state.tasks.find(t => t.id === draggedTaskId);
+        if (task) {
+          task.dueDate = targetDate;
+          if (task.status !== 'Completed') {
+            task.status = calculateTaskStatus(task);
+          }
+          saveState();
+          syncTaskToCloud(task);
+          render();
+          showToast(`Rescheduled "${task.assetName}" to ${formatDateDisplay(targetDate)}`);
+        }
+      });
+    });
+  }
+
+  function createTaskForDate(dateStr) {
+    if (!isAdmin()) return;
+    openTaskModal();
+    if (el.formDueDate) {
+      el.formDueDate.value = dateStr;
+      autoCalculateModalNextCycle();
+    }
+  }
+
+  function prevCalendarMonth() {
+    if (state.calendarMonth === 0) {
+      state.calendarMonth = 11;
+      state.calendarYear--;
+    } else {
+      state.calendarMonth--;
+    }
+    render();
+  }
+
+  function nextCalendarMonth() {
+    if (state.calendarMonth === 11) {
+      state.calendarMonth = 0;
+      state.calendarYear++;
+    } else {
+      state.calendarMonth++;
+    }
+    render();
+  }
+
+  function goCalendarToday() {
+    state.calendarYear = 2026;
+    state.calendarMonth = 7;
+    render();
+  }
+
   // Render Main App
   function render() {
     if (!state.auth.isAuthenticated) {
@@ -1272,20 +1460,28 @@
     updateKPIsAndHeader();
     const filteredTasks = getFilteredTasks();
 
-    if (filteredTasks.length === 0) {
+    if (filteredTasks.length === 0 && state.viewMode !== 'calendar') {
       el.taskGrid.classList.add('hidden');
       el.taskTableWrapper.classList.add('hidden');
+      if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
       el.emptyState.classList.remove('hidden');
     } else {
       el.emptyState.classList.add('hidden');
       if (state.viewMode === 'grid') {
         el.taskGrid.classList.remove('hidden');
         el.taskTableWrapper.classList.add('hidden');
+        if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
         renderGrid(filteredTasks);
-      } else {
+      } else if (state.viewMode === 'table') {
         el.taskGrid.classList.add('hidden');
         el.taskTableWrapper.classList.remove('hidden');
+        if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
         renderTable(filteredTasks);
+      } else if (state.viewMode === 'calendar') {
+        el.taskGrid.classList.add('hidden');
+        el.taskTableWrapper.classList.add('hidden');
+        if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.remove('hidden');
+        renderCalendar(filteredTasks);
       }
     }
   }
@@ -2572,6 +2768,7 @@
       state.viewMode = 'grid';
       el.viewToggleGrid.classList.add('active');
       el.viewToggleTable.classList.remove('active');
+      if (el.viewToggleCalendar) el.viewToggleCalendar.classList.remove('active');
       render();
     });
 
@@ -2579,8 +2776,23 @@
       state.viewMode = 'table';
       el.viewToggleTable.classList.add('active');
       el.viewToggleGrid.classList.remove('active');
+      if (el.viewToggleCalendar) el.viewToggleCalendar.classList.remove('active');
       render();
     });
+
+    if (el.viewToggleCalendar) {
+      el.viewToggleCalendar.addEventListener('click', () => {
+        state.viewMode = 'calendar';
+        el.viewToggleCalendar.classList.add('active');
+        el.viewToggleGrid.classList.remove('active');
+        el.viewToggleTable.classList.remove('active');
+        render();
+      });
+    }
+
+    if (el.btnCalendarPrev) el.btnCalendarPrev.addEventListener('click', prevCalendarMonth);
+    if (el.btnCalendarNext) el.btnCalendarNext.addEventListener('click', nextCalendarMonth);
+    if (el.btnCalendarToday) el.btnCalendarToday.addEventListener('click', goCalendarToday);
 
     el.btnCreateTask.addEventListener('click', () => {
       openTaskModal(null);
@@ -2828,7 +3040,8 @@
     deleteStoreAccount: deleteStoreAccount,
     deleteTask: deleteTask,
     addCustomCategory: addCustomCategory,
-    addCustomCondition: addCustomCondition
+    addCustomCondition: addCustomCondition,
+    createTaskForDate: createTaskForDate
   };
 
   if (document.readyState === 'loading') {
