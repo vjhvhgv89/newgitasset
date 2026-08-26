@@ -560,6 +560,7 @@
     completionAssetLocation: document.getElementById('completion-asset-location'),
     completionStatusPill: document.getElementById('completion-status-pill'),
     completionDateInput: document.getElementById('completion-date-input'),
+    completionStaffName: document.getElementById('completion-staff-name'),
     completionRemarksInput: document.getElementById('completion-remarks-input'),
     completionConditionSelect: document.getElementById('completion-condition-select'),
     imageUploadZone: document.getElementById('image-upload-zone'),
@@ -1988,11 +1989,16 @@
     el.imagePreviewContainer.classList.add('hidden');
     el.uploadZonePrompt.classList.remove('hidden');
     el.imagePreviewImg.src = '';
+    if (el.completionStaffName) el.completionStaffName.value = '';
     el.completionRemarksInput.value = '';
 
     el.completionModal.classList.add('open');
     el.completionModal.setAttribute('aria-hidden', 'false');
-    el.completionRemarksInput.focus();
+    if (el.completionStaffName) {
+      el.completionStaffName.focus();
+    } else {
+      el.completionRemarksInput.focus();
+    }
   }
 
   function closeCompletionModal() {
@@ -2068,15 +2074,15 @@
 
   function removeAttachedCompletionImage() {
     state.completionAttachedImageData = null;
-    el.completionImageFile.value = '';
     el.imagePreviewImg.src = '';
     el.imagePreviewContainer.classList.add('hidden');
     el.uploadZonePrompt.classList.remove('hidden');
+    el.completionImageFile.value = '';
   }
 
-  function useSamplePhoto(type) {
-    if (SAMPLE_PHOTOS[type]) {
-      setAttachedCompletionImage(SAMPLE_PHOTOS[type]);
+  function useSamplePhoto(sampleKey) {
+    if (SAMPLE_PHOTOS[sampleKey]) {
+      setAttachedCompletionImage(SAMPLE_PHOTOS[sampleKey]);
       showToast('Attached verification sample image');
     }
   }
@@ -2091,6 +2097,13 @@
     if (!completionDate) {
       alert('Please select the Date of Completion.');
       el.completionDateInput.focus();
+      return;
+    }
+
+    const staffName = el.completionStaffName ? el.completionStaffName.value.trim() : '';
+    if (!staffName) {
+      alert('Please enter your name (staff member or technician who performed this work).');
+      if (el.completionStaffName) el.completionStaffName.focus();
       return;
     }
 
@@ -2110,11 +2123,11 @@
     const nowIso = new Date().toISOString();
     const proofUrl = state.completionAttachedImageData;
 
-    // 1. Mark task completed with chosen completion date
+    // 1. Mark task completed with chosen completion date and staff performer name
     task.status = 'Completed';
     task.completedAt = completionDate;
     task.completedTimestamp = nowIso;
-    task.completedBy = getCurrentUserLabel();
+    task.completedBy = staffName;
     task.condition = condition;
     task.completionRemarks = remarks;
     task.proofImage = proofUrl;
@@ -2132,13 +2145,13 @@
       nextStatusText = `\nNext ${task.cycle} Maintenance Scheduled: ${formatDateDisplay(nextDate)} (${nextMeta.label})`;
     }
 
-    // 3. Log comment into history with permanent proof image URL
+    // 3. Log comment into history with permanent proof image URL & Performed By name
     task.comments = task.comments || [];
     task.comments.push({
       id: 'c-' + Date.now(),
-      author: getCurrentUserLabel(),
+      author: `${staffName} (${task.store})`,
       role: isAdmin() ? 'admin' : 'store',
-      text: `✅ Task Completed on ${formatDateDisplay(completionDate)} & Verified\nRemarks: ${remarks}${nextStatusText}`,
+      text: `✅ Task Completed on ${formatDateDisplay(completionDate)} by ${staffName} & Verified\nRemarks: ${remarks}${nextStatusText}`,
       proofImage: proofUrl,
       completionDate: completionDate,
       timestamp: nowIso,
