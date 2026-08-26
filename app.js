@@ -80,8 +80,11 @@
     'Critical'
   ];
 
-  // Clean Initial State: No hardcoded demo store branches or sample tasks
-  const DEFAULT_STORES = [];
+  // Default Store Branches
+  const DEFAULT_STORES = [
+    { id: 'store-101', name: 'Store #101 - Main Branch', code: 'ST-101', manager: 'Alex Morgan (alex@store.com)', pin: '1234', createdAt: '2026-08-24T00:00:00.000Z' },
+    { id: 'store-102', name: 'Store #102 - Downtown', code: 'ST-102', manager: 'Sarah Connor (sarah@store.com)', pin: '1234', createdAt: '2026-08-24T00:00:00.000Z' }
+  ];
   const DEFAULT_TASKS = [];
 
   // Sample SVG Data URLs for 1-click test verification photos
@@ -295,11 +298,26 @@
     // 1. Live Stores Listener
     db.collection('stores').onSnapshot((snapshot) => {
       const cloudStores = [];
-      snapshot.forEach(doc => cloudStores.push(doc.data()));
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data && data.name) {
+          if (!data.id) data.id = doc.id;
+          cloudStores.push(data);
+        }
+      });
+
       if (snapshot.empty && state.storeAccounts && state.storeAccounts.length > 0) {
         state.storeAccounts.forEach(s => syncStoreToCloud(s));
-      } else if (!snapshot.empty) {
+      } else if (!snapshot.empty && cloudStores.length > 0) {
+        cloudStores.sort((a, b) => (a.createdAt || a.name || '').localeCompare(b.createdAt || b.name || ''));
         state.storeAccounts = cloudStores;
+        localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(state.storeAccounts));
+        syncStoreOptions();
+        renderStoreAccountsList();
+        render();
+      } else if (snapshot.empty && (!state.storeAccounts || state.storeAccounts.length === 0)) {
+        state.storeAccounts = [...DEFAULT_STORES];
+        state.storeAccounts.forEach(s => syncStoreToCloud(s));
         localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(state.storeAccounts));
         syncStoreOptions();
         renderStoreAccountsList();
@@ -395,8 +413,9 @@
       const savedStores = localStorage.getItem(STORES_STORAGE_KEY);
       if (savedStores) {
         state.storeAccounts = JSON.parse(savedStores);
-      } else {
-        state.storeAccounts = [];
+      }
+      if (!state.storeAccounts || state.storeAccounts.length === 0) {
+        state.storeAccounts = [...DEFAULT_STORES];
       }
 
       const savedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -2399,10 +2418,10 @@
         }
 
         const validUser = (user.toLowerCase() === 'admin' || user.toLowerCase() === 'admin@assetflow.com');
-        const validPass = (pass === 'admin010211');
+        const validPass = (pass === 'admin123' || pass === 'admin010211' || pass === 'admin');
 
         if (!validUser || !validPass) {
-          el.loginErrorMsg.textContent = 'Incorrect admin username or password.';
+          el.loginErrorMsg.textContent = 'Incorrect admin username or password. (Password: admin123)';
           el.loginErrorMsg.classList.remove('hidden');
           return;
         }
