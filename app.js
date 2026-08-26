@@ -190,12 +190,18 @@
         base.setMonth(base.getMonth() + 1);
         break;
       case 'Quarterly':
+      case 'Every 3 Months':
         base.setMonth(base.getMonth() + 3);
         break;
       case 'Semi-Annual':
+      case 'Every 6 Months':
         base.setMonth(base.getMonth() + 6);
         break;
+      case 'Every 9 Months':
+        base.setMonth(base.getMonth() + 9);
+        break;
       case 'Annual':
+      case 'Every 12 Months':
         base.setFullYear(base.getFullYear() + 1);
         break;
       case 'Custom Scheduled Date':
