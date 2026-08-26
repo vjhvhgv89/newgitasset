@@ -40,9 +40,15 @@
         firebase.initializeApp(firebaseConfig);
       }
       db = firebase.firestore();
-      storage = firebase.storage();
+      if (typeof firebase.storage === 'function') {
+        try {
+          storage = firebase.storage();
+        } catch (e) {
+          console.warn('Firebase Storage init notice:', e);
+        }
+      }
       isFirebaseReady = true;
-      console.log('Firebase Cloud Firestore + Storage Initialized Successfully');
+      console.log('Firebase Cloud Firestore Initialized Successfully');
     }
   } catch (err) {
     console.warn('Firebase init error, fallback to local storage:', err);
@@ -287,7 +293,9 @@
     db.collection('stores').onSnapshot((snapshot) => {
       const cloudStores = [];
       snapshot.forEach(doc => cloudStores.push(doc.data()));
-      if (cloudStores.length > 0 || snapshot.metadata.hasPendingWrites === false) {
+      if (snapshot.empty && state.storeAccounts && state.storeAccounts.length > 0) {
+        state.storeAccounts.forEach(s => syncStoreToCloud(s));
+      } else if (!snapshot.empty) {
         state.storeAccounts = cloudStores;
         localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(state.storeAccounts));
         syncStoreOptions();
@@ -309,17 +317,21 @@
         cloudTasks.push(t);
       });
 
-      state.tasks = cloudTasks;
-      state.tasks.forEach(t => {
-        if (t.proofImage && t.comments && t.comments.length) {
-          const verifComment = [...t.comments].reverse().find(c => c.isVerification);
-          if (verifComment && !verifComment.proofImage) {
-            verifComment.proofImage = t.proofImage;
+      if (snapshot.empty && state.tasks && state.tasks.length > 0) {
+        state.tasks.forEach(t => syncTaskToCloud(t));
+      } else if (!snapshot.empty) {
+        state.tasks = cloudTasks;
+        state.tasks.forEach(t => {
+          if (t.proofImage && t.comments && t.comments.length) {
+            const verifComment = [...t.comments].reverse().find(c => c.isVerification);
+            if (verifComment && !verifComment.proofImage) {
+              verifComment.proofImage = t.proofImage;
+            }
           }
-        }
-      });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
-      render();
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+        render();
+      }
     }, err => {
       console.warn('Tasks realtime sync note:', err.message);
     });
@@ -339,6 +351,8 @@
           syncConditionOptions();
         }
         render();
+      } else {
+        syncMetadataToCloud();
       }
     }, err => {
       console.warn('Metadata realtime sync note:', err.message);
