@@ -1226,8 +1226,19 @@ button {
 .task-footer-right {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+
+.task-footer-right .btn-sm {
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .completed-lock-badge {
