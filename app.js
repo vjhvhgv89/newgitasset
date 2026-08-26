@@ -60,6 +60,7 @@
   const STORES_STORAGE_KEY = 'assetflow_stores_db_v4';
   const CATEGORIES_STORAGE_KEY = 'assetflow_categories_db_v4';
   const CONDITIONS_STORAGE_KEY = 'assetflow_conditions_db_v4';
+  const NOTIFICATIONS_STORAGE_KEY = 'assetflow_notifications_db_v4';
 
   // Default Categories
   const DEFAULT_CATEGORIES = [
@@ -108,6 +109,7 @@
     conditions: [],
     storeAccounts: [],
     tasks: [],
+    notifications: [],
     filterStatus: 'all',
     filterStore: 'all',
     filterCategory: 'all',
@@ -386,6 +388,32 @@
     }, err => {
       console.warn('Metadata realtime sync note:', err.message);
     });
+
+    // 4. Live Notifications Listener
+    db.collection('notifications').orderBy('createdAt', 'desc').limit(40).onSnapshot((snapshot) => {
+      const cloudNotifs = [];
+      snapshot.forEach(doc => {
+        const n = doc.data();
+        if (!n.id) n.id = doc.id;
+        cloudNotifs.push(n);
+      });
+
+      if (!snapshot.empty) {
+        // Detect brand new notifications to show toast popup
+        const currentIds = new Set((state.notifications || []).map(item => item.id));
+        cloudNotifs.forEach(n => {
+          if (!currentIds.has(n.id) && isNotificationRelevant(n) && n.sender !== getCurrentUserLabel()) {
+            showToast(`🔔 ${n.title}: ${n.message}`);
+          }
+        });
+
+        state.notifications = cloudNotifs;
+        localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(state.notifications));
+        renderNotifications();
+      }
+    }, err => {
+      console.warn('Notifications realtime sync note:', err.message);
+    });
   }
 
   // Save to localStorage & Cloud
@@ -396,6 +424,7 @@
       localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(state.storeAccounts));
       localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state.categories));
       localStorage.setItem(CONDITIONS_STORAGE_KEY, JSON.stringify(state.conditions));
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(state.notifications || []));
     } catch (e) {
       console.warn('Could not save to localStorage:', e);
     }
@@ -431,6 +460,13 @@
         state.auth = JSON.parse(savedAuth);
       }
 
+      const savedNotifications = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+      if (savedNotifications) {
+        state.notifications = JSON.parse(savedNotifications);
+      } else {
+        state.notifications = [];
+      }
+
       const rawTasks = localStorage.getItem(STORAGE_KEY);
       if (rawTasks) {
         state.tasks = JSON.parse(rawTasks);
@@ -442,6 +478,7 @@
       state.conditions = [...DEFAULT_CONDITIONS];
       state.categories = [...DEFAULT_CATEGORIES];
       state.storeAccounts = [];
+      state.notifications = [];
       state.tasks = [];
     }
 
@@ -500,6 +537,15 @@
     viewTitle: document.getElementById('view-title'),
     viewCaption: document.getElementById('view-caption'),
     currentDateDisplay: document.getElementById('current-date-display'),
+
+    // Notification Center
+    btnNotificationBell: document.getElementById('btn-notification-bell'),
+    notificationBadge: document.getElementById('notification-badge'),
+    notificationDropdown: document.getElementById('notification-dropdown'),
+    notificationUnreadPill: document.getElementById('notification-unread-pill'),
+    notificationList: document.getElementById('notification-list'),
+    btnMarkAllRead: document.getElementById('btn-mark-all-read'),
+    btnClearNotifications: document.getElementById('btn-clear-notifications'),
 
     // KPI counters
     countAll: document.getElementById('count-all'),
@@ -711,6 +757,195 @@
     if (!el.confirmModal) return;
     el.confirmModal.classList.remove('open');
     el.confirmModal.setAttribute('aria-hidden', 'true');
+  }
+
+  // =========================================================================
+  // Multi-Account Real-Time Notification Center
+  // =========================================================================
+
+  function isNotificationRelevant(notif) {
+    if (!notif) return false;
+    if (isAdmin()) {
+      return notif.target === 'admin' || notif.target === 'all';
+    } else {
+      const currentStore = state.auth.store;
+      return notif.target === currentStore || notif.target === 'all';
+    }
+  }
+
+  function sendAppNotification({ target, type, title, message, taskId, sender }) {
+    const notif = {
+      id: 'notif-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+      target: target || 'all',
+      type: type || 'task_updated',
+      title: title || 'Task Alert',
+      message: message || '',
+      taskId: taskId || null,
+      sender: sender || getCurrentUserLabel(),
+      createdAt: new Date().toISOString(),
+      readBy: []
+    };
+
+    state.notifications = state.notifications || [];
+    state.notifications.unshift(notif);
+    if (state.notifications.length > 50) state.notifications.pop();
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(state.notifications));
+
+    // Push to Firestore Cloud
+    if (isFirebaseReady && db) {
+      db.collection('notifications').doc(notif.id).set(notif).catch(e => console.warn('Notification sync note:', e));
+    }
+
+    renderNotifications();
+  }
+
+  function formatTimeAgo(isoStr) {
+    if (!isoStr) return '';
+    const diffMs = Date.now() - new Date(isoStr).getTime();
+    const diffSec = Math.max(0, Math.floor(diffMs / 1000));
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays}d ago`;
+  }
+
+  function renderNotifications() {
+    if (!el.notificationList) return;
+    const userRoleOrStore = isAdmin() ? 'admin' : (state.auth.store || 'store');
+    const relevantNotifs = (state.notifications || []).filter(isNotificationRelevant);
+
+    const unreadNotifs = relevantNotifs.filter(n => !(n.readBy && n.readBy.includes(userRoleOrStore)));
+    const unreadCount = unreadNotifs.length;
+
+    if (el.notificationBadge) {
+      if (unreadCount > 0) {
+        el.notificationBadge.textContent = unreadCount > 9 ? '9+' : unreadCount;
+        el.notificationBadge.classList.remove('hidden');
+      } else {
+        el.notificationBadge.classList.add('hidden');
+      }
+    }
+
+    if (el.notificationUnreadPill) {
+      el.notificationUnreadPill.textContent = `${unreadCount} new`;
+    }
+
+    if (relevantNotifs.length === 0) {
+      el.notificationList.innerHTML = `
+        <div class="notification-empty">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span>No notifications yet</span>
+        </div>
+      `;
+      return;
+    }
+
+    el.notificationList.innerHTML = relevantNotifs.map(n => {
+      const isUnread = !(n.readBy && n.readBy.includes(userRoleOrStore));
+      let iconClass = 'type-updated';
+      let iconSvg = '📌';
+      if (n.type === 'task_created') {
+        iconClass = 'type-created';
+        iconSvg = '➕';
+      } else if (n.type === 'task_completed') {
+        iconClass = 'type-completed';
+        iconSvg = '✅';
+      } else if (n.type === 'comment_added') {
+        iconClass = 'type-comment';
+        iconSvg = '💬';
+      } else if (n.type === 'task_reopened') {
+        iconClass = 'type-created';
+        iconSvg = '🔄';
+      }
+
+      const timeAgo = formatTimeAgo(n.createdAt);
+
+      return `
+        <div class="notification-item ${isUnread ? 'unread' : ''}" onclick="window.assetApp.handleNotificationClick('${n.id}', '${n.taskId || ''}')">
+          <div class="notification-icon-box ${iconClass}">${iconSvg}</div>
+          <div class="notification-content">
+            <div class="notification-item-title">${escapeHTML(n.title)}</div>
+            <div class="notification-item-msg">${escapeHTML(n.message)}</div>
+            <div class="notification-item-time">${timeAgo} • From ${escapeHTML(n.sender || 'System')}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function toggleNotificationDropdown() {
+    if (!el.notificationDropdown) return;
+    const isHidden = el.notificationDropdown.classList.contains('hidden');
+    if (isHidden) {
+      el.notificationDropdown.classList.remove('hidden');
+      renderNotifications();
+    } else {
+      el.notificationDropdown.classList.add('hidden');
+    }
+  }
+
+  function closeNotificationDropdown() {
+    if (el.notificationDropdown) {
+      el.notificationDropdown.classList.add('hidden');
+    }
+  }
+
+  function markNotificationRead(notifId) {
+    const notif = (state.notifications || []).find(n => n.id === notifId);
+    if (!notif) return;
+    const userRoleOrStore = isAdmin() ? 'admin' : (state.auth.store || 'store');
+    notif.readBy = notif.readBy || [];
+    if (!notif.readBy.includes(userRoleOrStore)) {
+      notif.readBy.push(userRoleOrStore);
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(state.notifications));
+      if (isFirebaseReady && db) {
+        db.collection('notifications').doc(notif.id).update({ readBy: notif.readBy }).catch(() => {});
+      }
+      renderNotifications();
+    }
+  }
+
+  function markAllNotificationsRead() {
+    const userRoleOrStore = isAdmin() ? 'admin' : (state.auth.store || 'store');
+    (state.notifications || []).forEach(notif => {
+      if (isNotificationRelevant(notif)) {
+        notif.readBy = notif.readBy || [];
+        if (!notif.readBy.includes(userRoleOrStore)) {
+          notif.readBy.push(userRoleOrStore);
+          if (isFirebaseReady && db) {
+            db.collection('notifications').doc(notif.id).update({ readBy: notif.readBy }).catch(() => {});
+          }
+        }
+      }
+    });
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(state.notifications));
+    renderNotifications();
+    showToast('All notifications marked as read');
+  }
+
+  function clearNotifications() {
+    const userRoleOrStore = isAdmin() ? 'admin' : (state.auth.store || 'store');
+    state.notifications = (state.notifications || []).filter(n => !isNotificationRelevant(n));
+    localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(state.notifications));
+    renderNotifications();
+    showToast('Notifications cleared');
+  }
+
+  function handleNotificationClick(notifId, taskId) {
+    markNotificationRead(notifId);
+    closeNotificationDropdown();
+    if (taskId) {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (task) {
+        openCommentsDrawer(taskId);
+      }
+    }
   }
 
   // Populate dynamic store dropdowns
@@ -1549,6 +1784,8 @@
         renderCalendar(filteredTasks);
       }
     }
+
+    renderNotifications();
   }
 
   // Login handler
@@ -1893,6 +2130,17 @@
           showToast(`Task reopened: ${task.assetName}`);
           saveState();
           syncTaskToCloud(task);
+
+          // Notify Store that task has been reopened
+          sendAppNotification({
+            target: task.store,
+            type: 'task_reopened',
+            title: 'Task Reopened by Admin',
+            message: `Admin reopened "${task.assetName}" at ${task.store} for a new maintenance cycle.`,
+            taskId: task.id,
+            sender: 'Admin (Headquarters)'
+          });
+
           render();
           if (state.activeDrawerTaskId === taskId) {
             openCommentsDrawer(taskId);
@@ -2160,6 +2408,17 @@
 
     saveState();
     syncTaskToCloud(task);
+
+    // Notify Admin that task has been completed with photo verification
+    sendAppNotification({
+      target: 'admin',
+      type: 'task_completed',
+      title: 'Task Completed & Verified',
+      message: `${staffName} (${task.store}) completed maintenance on "${task.assetName}" with verified photo proof.`,
+      taskId: task.id,
+      sender: `${staffName} (${task.store})`
+    });
+
     closeCompletionModal();
     render();
 
@@ -2591,6 +2850,17 @@
       state.tasks[taskIndex] = updatedTask;
       saveState();
       syncTaskToCloud(updatedTask);
+
+      // Notify Store of Task Updates
+      sendAppNotification({
+        target: updatedTask.store,
+        type: 'task_updated',
+        title: 'Task Details Updated',
+        message: `Admin updated maintenance specifications/schedule for "${updatedTask.assetName}".`,
+        taskId: updatedTask.id,
+        sender: 'Admin (Headquarters)'
+      });
+
       showToast(`Updated task: ${assetName} (Synced to Cloud)`);
     } else {
       const newTask = {
@@ -2623,6 +2893,17 @@
       state.tasks.unshift(newTask);
       saveState();
       syncTaskToCloud(newTask);
+
+      // Notify Assigned Store of New Task
+      sendAppNotification({
+        target: newTask.store,
+        type: 'task_created',
+        title: 'New Maintenance Task Assigned',
+        message: `Admin assigned new ${newTask.cycle} maintenance for "${newTask.assetName}" at ${newTask.store} (Due: ${formatDateDisplay(newTask.dueDate)}).`,
+        taskId: newTask.id,
+        sender: 'Admin (Headquarters)'
+      });
+
       showToast(`New task created for ${store} (Synced to Cloud)`);
     }
 
@@ -2652,6 +2933,18 @@
 
     saveState();
     syncTaskToCloud(task);
+
+    // Cross-notify (Store -> Admin or Admin -> Store)
+    const targetRecipient = isAdmin() ? task.store : 'admin';
+    sendAppNotification({
+      target: targetRecipient,
+      type: 'comment_added',
+      title: `New Remark on "${task.assetName}"`,
+      message: `${getCurrentUserLabel()}: "${text.length > 70 ? text.substring(0, 67) + '...' : text}"`,
+      taskId: task.id,
+      sender: getCurrentUserLabel()
+    });
+
     renderCommentsList(task);
     render();
     el.commentInput.value = '';
@@ -3045,9 +3338,42 @@
       });
     }
 
+    // Notification Center Event Listeners
+    if (el.btnNotificationBell) {
+      el.btnNotificationBell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleNotificationDropdown();
+      });
+    }
+
+    if (el.btnMarkAllRead) {
+      el.btnMarkAllRead.addEventListener('click', (e) => {
+        e.stopPropagation();
+        markAllNotificationsRead();
+      });
+    }
+
+    if (el.btnClearNotifications) {
+      el.btnClearNotifications.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearNotifications();
+      });
+    }
+
+    if (el.notificationDropdown) {
+      el.notificationDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    }
+
+    document.addEventListener('click', () => {
+      closeNotificationDropdown();
+    });
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeSidebar();
+        closeNotificationDropdown();
         if (el.confirmModal && el.confirmModal.classList.contains('open')) closeConfirmModal();
         if (el.storeManagementModal.classList.contains('open')) closeStoreManagementModal();
         if (el.lightboxModal.classList.contains('open')) closeLightbox();
@@ -3147,7 +3473,11 @@
     deleteTask: deleteTask,
     addCustomCategory: addCustomCategory,
     addCustomCondition: addCustomCondition,
-    createTaskForDate: createTaskForDate
+    createTaskForDate: createTaskForDate,
+    handleNotificationClick: handleNotificationClick,
+    markNotificationRead: markNotificationRead,
+    markAllNotificationsRead: markAllNotificationsRead,
+    clearNotifications: clearNotifications
   };
 
   if (document.readyState === 'loading') {
