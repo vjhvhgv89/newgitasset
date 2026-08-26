@@ -1349,18 +1349,6 @@
   }
 
   function renderStoreAccountsList() {
-    if (state.storeAccounts.length === 0) {
-      el.storeAccountsTbody.innerHTML = `
-        <tr>
-          <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
-            No store branches configured yet. Use the form below to add your first store.
-          </td>
-        </tr>
-      `;
-      return;
-    }
-
-  function renderStoreAccountsList() {
     if (!state.storeAccounts) state.storeAccounts = [];
     
     // Ensure every store account has a unique ID
