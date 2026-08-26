@@ -1334,16 +1334,22 @@
 
     el.storeAccountsTbody.innerHTML = state.storeAccounts.map((s, idx) => `
       <tr>
-        <td><strong>${escapeHTML(s.name)}</strong></td>
-        <td><span class="task-id-badge">${escapeHTML(s.code || '—')}</span></td>
-        <td><small style="color: var(--text-muted);">${escapeHTML(s.manager || 'No contact configured')}</small></td>
         <td>
-          <input type="text" class="input-pin-inline" id="store-pin-input-${idx}" value="${escapeHTML(s.pin || '1234')}" placeholder="PIN" maxlength="12">
+          <input type="text" class="input-text input-sm" id="store-name-input-${idx}" value="${escapeHTML(s.name)}" placeholder="Store Name" required style="min-width: 140px; font-weight: 600;">
+        </td>
+        <td>
+          <input type="text" class="input-text input-sm" id="store-code-input-${idx}" value="${escapeHTML(s.code || '')}" placeholder="Code" style="min-width: 80px; text-transform: uppercase;">
+        </td>
+        <td>
+          <input type="text" class="input-text input-sm" id="store-manager-input-${idx}" value="${escapeHTML(s.manager || '')}" placeholder="Manager / Contact" style="min-width: 150px;">
+        </td>
+        <td>
+          <input type="text" class="input-text input-sm input-pin-inline" id="store-pin-input-${idx}" value="${escapeHTML(s.pin || '1234')}" placeholder="PIN" maxlength="12">
         </td>
         <td>
           <div style="display: flex; gap: 6px; align-items: center;">
-            <button class="btn btn-secondary btn-sm" onclick="window.assetApp.updateStorePin(${idx})">
-              Save PIN
+            <button class="btn btn-secondary btn-sm" onclick="window.assetApp.updateStoreAccount(${idx})">
+              Save
             </button>
             <button class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.deleteStoreAccount(${idx})" title="Remove Store Branch">
               Delete
@@ -1354,19 +1360,74 @@
     `).join('');
   }
 
-  function updateStorePin(index) {
+  function updateStoreAccount(index) {
     if (!isAdmin()) return;
-    const inputEl = document.getElementById(`store-pin-input-${index}`);
-    if (!inputEl) return;
-    const newPin = inputEl.value.trim();
-    if (!newPin) {
-      alert('PIN cannot be empty.');
+    const store = state.storeAccounts[index];
+    if (!store) return;
+
+    const nameInput = document.getElementById(`store-name-input-${index}`);
+    const codeInput = document.getElementById(`store-code-input-${index}`);
+    const managerInput = document.getElementById(`store-manager-input-${index}`);
+    const pinInput = document.getElementById(`store-pin-input-${index}`);
+
+    if (!nameInput || !pinInput) return;
+
+    const newName = nameInput.value.trim();
+    const newCode = codeInput ? codeInput.value.trim() : store.code;
+    const newManager = managerInput ? managerInput.value.trim() : store.manager;
+    const newPin = pinInput.value.trim();
+
+    if (!newName) {
+      alert('Store Name cannot be empty.');
+      nameInput.focus();
       return;
     }
-    state.storeAccounts[index].pin = newPin;
+
+    if (!newPin) {
+      alert('Access PIN cannot be empty.');
+      pinInput.focus();
+      return;
+    }
+
+    // Check duplicate store name if name was changed
+    const duplicate = state.storeAccounts.some((s, idx) => idx !== index && s.name.toLowerCase() === newName.toLowerCase());
+    if (duplicate) {
+      alert(`A store branch with the name "${newName}" already exists.`);
+      nameInput.focus();
+      return;
+    }
+
+    const oldName = store.name;
+    store.name = newName;
+    store.code = newCode;
+    store.manager = newManager;
+    store.pin = newPin;
+
+    // If store name changed, update any existing tasks assigned to oldName
+    if (oldName !== newName) {
+      let updatedTaskCount = 0;
+      state.tasks.forEach(t => {
+        if (t.store === oldName) {
+          t.store = newName;
+          syncTaskToCloud(t);
+          updatedTaskCount++;
+        }
+      });
+      if (updatedTaskCount > 0) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+      }
+    }
+
     saveState();
-    syncStoreToCloud(state.storeAccounts[index]);
-    showToast(`Updated PIN for ${state.storeAccounts[index].name}`);
+    syncStoreToCloud(store);
+    syncStoreOptions();
+    renderStoreAccountsList();
+    render();
+    showToast(`Updated store details for "${newName}"`);
+  }
+
+  function updateStorePin(index) {
+    updateStoreAccount(index);
   }
 
   function deleteStoreAccount(index) {
