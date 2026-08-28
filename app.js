@@ -1828,8 +1828,6 @@
         nextCycleCell = `<span style="color: var(--text-subtle);">One-Time</span>`;
       }
 
-      const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
-
       let dateCellHtml = '';
       if (!isAdmin()) {
         if (isComplete || task.completedAt) {
@@ -1845,7 +1843,7 @@
         }
       } else {
         dateCellHtml = `
-          <div>${isComplete ? `<span style="color:#059669; font-weight:700;">Done: ${formatDateDisplay(task.completedAt)}</span>` : `<span style="font-weight:600;">${formatDateDisplay(task.dueDate)}</span>`}</div>
+          <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(task.dueDate)}</span></div>
           <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
         `;
       }
@@ -1866,9 +1864,9 @@
       return `
         <tr draggable="true" data-task-id="${task.id}">
           <td>
-            <span class="status-chip ${displayMeta.className}">
-              <span class="status-dot ${displayMeta.dotClass}"></span>
-              ${displayMeta.label}
+            <span class="status-chip ${meta.className}">
+              <span class="status-dot ${meta.dotClass}"></span>
+              ${meta.label}
             </span>
           </td>
           <td>
@@ -1892,17 +1890,18 @@
             </button>
           </td>
           <td>
-            <div style="display: flex; gap: 4px; align-items: center; white-space: nowrap;">
+            <div class="table-actions-cell">
               ${isAdmin() ? `
                 ${isComplete ? `
                   <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task (Admin)">Reopen</button>
                 ` : ''}
-                <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task (Admin)">Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete task permanently (Admin)" style="padding: 4px 6px;">
+                <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task details (Admin)">Edit</button>
+                <button class="btn btn-danger btn-sm btn-icon-only" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete task permanently (Admin)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                    <path d="M10 11v6"></path><path d="M14 11v6"></path>
+                    <path d="M10 11v6"></path>
+                    <path d="M14 11v6"></path>
                     <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
                   </svg>
                 </button>
