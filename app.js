@@ -1892,35 +1892,35 @@
             </button>
           </td>
           <td>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              ${isComplete ? `
-                ${isAdmin() ? `
-                  <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task">Reopen</button>
-                ` : ''}
-                ${hasNextCycle && !isAdmin() ? `
-                  <button class="btn btn-primary btn-sm btn-start-cycle" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start next maintenance cycle early">
-                    ⚡ Start Next Cycle
-                  </button>
-                ` : `
-                  <span style="color: #059669; font-size: 11.5px; font-weight: 700;">✓ ${formatDateDisplay(task.completedAt)}</span>
-                `}
-              ` : !isAdmin() ? `
-                <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')">
-                  Done
-                </button>
-              ` : ''}
+            <div style="display: flex; gap: 4px; align-items: center; white-space: nowrap;">
               ${isAdmin() ? `
-                <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task (Admin only)">Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete asset permanently (Admin only)">
+                ${isComplete ? `
+                  <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task (Admin)">Reopen</button>
+                ` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task (Admin)">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete task permanently (Admin)" style="padding: 4px 6px;">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
                     <path d="M10 11v6"></path><path d="M14 11v6"></path>
                     <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
                   </svg>
-                  Delete
                 </button>
-              ` : ''}
+              ` : `
+                ${isComplete ? `
+                  ${hasNextCycle ? `
+                    <button class="btn btn-primary btn-sm btn-start-cycle" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start next maintenance cycle early">
+                      ⚡ Start Next Cycle
+                    </button>
+                  ` : `
+                    <span style="color: #059669; font-size: 11px; font-weight: 700;">✓ Completed</span>
+                  `}
+                ` : `
+                  <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')">
+                    Done
+                  </button>
+                `}
+              `}
             </div>
           </td>
         </tr>
