@@ -180,6 +180,40 @@
     return calculateDateStatus(task.dueDate);
   }
 
+  // Get contextual display status for a task based on active filter / lifecycle
+  function getTaskDisplayStatus(task) {
+    if (!task) return 'Upcoming';
+    const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
+    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+    const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
+
+    // If specific filter is active, align chip directly to filtered context
+    if (state.filterStatus === 'completed' && isComplete) {
+      return 'Completed';
+    }
+    if (state.filterStatus === 'overdue' && isComplete && hasNextCycle) {
+      return calculateDateStatus(nextCycleDate);
+    }
+    if (state.filterStatus === 'due-today' && isComplete && hasNextCycle) {
+      return calculateDateStatus(nextCycleDate);
+    }
+    if (state.filterStatus === 'due-soon' && isComplete && hasNextCycle) {
+      return calculateDateStatus(nextCycleDate);
+    }
+    if (state.filterStatus === 'upcoming' && isComplete && hasNextCycle) {
+      return calculateDateStatus(nextCycleDate);
+    }
+
+    if (isComplete) {
+      if (hasNextCycle) {
+        return calculateDateStatus(nextCycleDate);
+      }
+      return 'Completed';
+    }
+
+    return calculateDateStatus(task.dueDate);
+  }
+
   // Calculate Next Maintenance Cycle Due Date
   function calculateNextCycleDate(baseDateStr, cycle) {
     if (!baseDateStr || !cycle || cycle === 'One-Time Inspection') return null;
@@ -1601,9 +1635,9 @@
     }
 
     el.taskGrid.innerHTML = tasks.map(task => {
-      const status = calculateTaskStatus(task);
+      const status = getTaskDisplayStatus(task);
       const meta = getStatusMeta(status);
-      const isComplete = status === 'Completed' || Boolean(task.completedAt);
+      const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
 
@@ -1642,7 +1676,7 @@
         `;
       }
 
-      const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
+      const displayMeta = meta;
 
       return `
         <article class="task-card" draggable="true" data-id="${task.id}" data-task-id="${task.id}">
@@ -1802,9 +1836,9 @@
     }
 
     el.taskTableBody.innerHTML = tasks.map(task => {
-      const status = calculateTaskStatus(task);
+      const status = getTaskDisplayStatus(task);
       const meta = getStatusMeta(status);
-      const isComplete = status === 'Completed' || Boolean(task.completedAt);
+      const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
 
@@ -3228,9 +3262,9 @@
     const nextStatus = hasNextCycle ? calculateDateStatus(nextCycleDate) : null;
     const nextMeta = nextStatus ? getStatusMeta(nextStatus) : null;
 
-    const status = calculateTaskStatus(task);
+    const status = getTaskDisplayStatus(task);
     const meta = getStatusMeta(status);
-    const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
+    const displayMeta = meta;
 
     if (el.drawerAssetName) el.drawerAssetName.textContent = task.assetName;
     if (el.drawerAssetMeta) el.drawerAssetMeta.textContent = `${task.store} • ${task.serialNumber ? '#' + task.serialNumber : task.category}`;
