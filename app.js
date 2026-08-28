@@ -1821,9 +1821,10 @@
 
   // Render Task Table View
   function renderTable(tasks) {
+    const isCompletedFilter = state.filterStatus === 'completed';
     const thDate = document.getElementById('th-table-date');
     if (thDate) {
-      thDate.textContent = isAdmin() ? 'Due Date' : 'Date Completed';
+      thDate.textContent = isCompletedFilter ? 'Date Completed' : 'Due Date';
     }
     const thNextCycle = document.getElementById('th-table-next-cycle');
     if (thNextCycle) {
@@ -1863,21 +1864,15 @@
       }
 
       let dateCellHtml = '';
-      if (!isAdmin()) {
-        if (isComplete || task.completedAt) {
-          dateCellHtml = `
-            <div><span style="color:#059669; font-weight:700;">Done: ${formatDateDisplay(task.completedAt || task.dueDate)}</span></div>
-            <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
-          `;
-        } else {
-          dateCellHtml = `
-            <div><span style="color:var(--text-main); font-weight:600;">${formatDateDisplay(task.dueDate)}</span></div>
-            <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
-          `;
-        }
-      } else {
+      if (isCompletedFilter) {
         dateCellHtml = `
-          <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(task.dueDate)}</span></div>
+          <div><span style="color:#059669; font-weight:700;">Done: ${formatDateDisplay(task.completedAt || task.dueDate)}</span></div>
+          <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
+        `;
+      } else {
+        const targetDueDate = (isComplete && hasNextCycle) ? nextCycleDate : task.dueDate;
+        dateCellHtml = `
+          <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(targetDueDate)}</span></div>
           <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
         `;
       }
