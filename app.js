@@ -119,6 +119,7 @@
     calendarYear: 2026,
     calendarMonth: 7,
     activeDrawerTaskId: null,
+    drawerActiveTab: 'all',
 
     // Completion Modal State
     completingTaskId: null,
@@ -662,7 +663,7 @@
     formStatusOverride: document.getElementById('form-status-override'),
     formDescription: document.getElementById('form-description'),
 
-    // Comments Drawer
+    // Comments & Activity Drawer
     commentsDrawer: document.getElementById('comments-drawer'),
     btnDrawerClose: document.getElementById('btn-drawer-close'),
     drawerAssetName: document.getElementById('drawer-asset-name'),
@@ -670,14 +671,18 @@
     drawerStatusBadge: document.getElementById('drawer-status-badge'),
     drawerDueBadge: document.getElementById('drawer-due-badge'),
     drawerConditionBadge: document.getElementById('drawer-condition-badge'),
+    drawerCycleBadge: document.getElementById('drawer-cycle-badge'),
     drawerInstructionsBox: document.getElementById('drawer-instructions-box'),
+    drawerInstructionsToggle: document.getElementById('drawer-instructions-toggle'),
+    drawerInstructionsContent: document.getElementById('drawer-instructions-content'),
     drawerInstructionsText: document.getElementById('drawer-instructions-text'),
-    drawerProofBox: document.getElementById('drawer-proof-box'),
-    drawerProofTitle: document.getElementById('drawer-proof-title'),
-    drawerProofImg: document.getElementById('drawer-proof-img'),
-    drawerGalleryContainer: document.getElementById('drawer-gallery-container'),
-    drawerGalleryStrip: document.getElementById('drawer-gallery-strip'),
-    commentsCount: document.getElementById('comments-count'),
+    tabAllCount: document.getElementById('tab-all-count'),
+    tabPhotosCount: document.getElementById('tab-photos-count'),
+    tabRemarksCount: document.getElementById('tab-remarks-count'),
+    drawerViewTimeline: document.getElementById('drawer-view-timeline'),
+    drawerViewPhotos: document.getElementById('drawer-view-photos'),
+    photosGalleryGrid: document.getElementById('photos-gallery-grid'),
+    drawerQuickChips: document.getElementById('drawer-quick-chips'),
     commentsList: document.getElementById('comments-list'),
     commentForm: document.getElementById('comment-form'),
     commentAuthorLabel: document.getElementById('comment-author-label'),
@@ -2895,7 +2900,284 @@
     hideCustomConditionInput();
   }
 
-  // Open Comments Drawer with Photo History Gallery
+  // Helper: Detect if a comment is an automated system audit log
+  function isTimelineSystemEvent(c) {
+    if (!c || !c.text) return false;
+    if (c.isSystemEvent || c.isSystemLog) return true;
+    const text = c.text.trim();
+    return (
+      text.includes('Started next') && text.includes('cycle early') ||
+      text.startsWith('Task created in category') ||
+      text.startsWith('Auto-scheduled next cycle') ||
+      text.startsWith('Task schedule modified by') ||
+      text.startsWith('Task reassigned to')
+    );
+  }
+
+  // Helper: Collect all unique verified proof photos from comments and task
+  function getTimelinePhotos(task) {
+    if (!task) return [];
+    const allPhotos = [];
+    if (task.comments && task.comments.length) {
+      task.comments.forEach(c => {
+        if (c.proofImage) {
+          allPhotos.push({
+            src: c.proofImage,
+            date: c.completionDate || c.timestamp,
+            author: c.author || 'Store Inspector',
+            remarks: c.text && !c.text.startsWith('Task Completed on') ? c.text : '',
+            timestamp: c.timestamp
+          });
+        }
+      });
+    }
+    if (task.proofImage && !allPhotos.some(p => p.src === task.proofImage)) {
+      allPhotos.unshift({
+        src: task.proofImage,
+        date: task.completedAt || task.completedTimestamp || 'Latest Cycle',
+        author: task.completedBy || 'Store Inspector',
+        remarks: task.completionRemarks || '',
+        timestamp: task.completedAt || ''
+      });
+    }
+    return allPhotos;
+  }
+
+  // Toggle Instructions Accordion in Drawer
+  function toggleDrawerInstructions() {
+    if (!el.drawerInstructionsBox || !el.drawerInstructionsContent) return;
+    const isOpen = el.drawerInstructionsBox.classList.contains('open');
+    if (isOpen) {
+      el.drawerInstructionsBox.classList.remove('open');
+      el.drawerInstructionsContent.classList.add('hidden');
+      if (el.drawerInstructionsToggle) el.drawerInstructionsToggle.setAttribute('aria-expanded', 'false');
+    } else {
+      el.drawerInstructionsBox.classList.add('open');
+      el.drawerInstructionsContent.classList.remove('hidden');
+      if (el.drawerInstructionsToggle) el.drawerInstructionsToggle.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  // Render Preset Action Chips
+  function renderDrawerQuickChips() {
+    if (!el.drawerQuickChips) return;
+    const adminChips = [
+      '📌 Approved & Logged',
+      '⚠️ Re-inspection Needed',
+      '🔍 Upload Clearer Photo',
+      '🛠️ Contractor Contacted',
+      '💬 General Note'
+    ];
+    const storeChips = [
+      '✅ Routine Clean Done',
+      '⚠️ Replacement Part Needed',
+      '📞 Contacting Technician',
+      '⏳ Pending Manager Check',
+      '📸 Proof Photo Uploaded'
+    ];
+
+    const chips = isAdmin() ? adminChips : storeChips;
+    el.drawerQuickChips.innerHTML = chips.map(chip => `
+      <button type="button" class="quick-chip" onclick="window.assetApp.insertQuickChipText('${escapeHTML(chip)}')">
+        ${escapeHTML(chip)}
+      </button>
+    `).join('');
+  }
+
+  // Insert Quick Chip text into Comment Box
+  function insertQuickChipText(chipText) {
+    if (!el.commentInput) return;
+    const current = el.commentInput.value.trim();
+    if (!current) {
+      el.commentInput.value = chipText + ' — ';
+    } else {
+      el.commentInput.value = current + ' | ' + chipText;
+    }
+    el.commentInput.focus();
+  }
+
+  // Switch Drawer Segmented Tabs
+  function switchDrawerTab(tabName) {
+    state.drawerActiveTab = tabName;
+    const tabBtns = document.querySelectorAll('.drawer-tab-btn');
+    tabBtns.forEach(btn => {
+      if (btn.dataset.tab === tabName) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+      }
+    });
+
+    const task = state.tasks.find(t => t.id === state.activeDrawerTaskId);
+    if (!task) return;
+
+    if (tabName === 'photos') {
+      if (el.drawerViewTimeline) el.drawerViewTimeline.classList.add('hidden');
+      if (el.drawerViewPhotos) el.drawerViewPhotos.classList.remove('hidden');
+      renderPhotosGallery(task, getTimelinePhotos(task));
+    } else {
+      if (el.drawerViewPhotos) el.drawerViewPhotos.classList.add('hidden');
+      if (el.drawerViewTimeline) el.drawerViewTimeline.classList.remove('hidden');
+      renderTimelineStream(task, tabName);
+    }
+  }
+
+  // Render Connected Activity Timeline Stream
+  function renderTimelineStream(task, mode = 'all') {
+    if (!el.commentsList) return;
+    const allComments = task.comments || [];
+    let displayComments = allComments;
+
+    if (mode === 'remarks') {
+      displayComments = allComments.filter(c => !isTimelineSystemEvent(c));
+    }
+
+    if (displayComments.length === 0) {
+      const msg = mode === 'remarks'
+        ? 'No remarks or discussions posted yet. Use the note box below to start a conversation.'
+        : 'No activity logged yet for this asset task.';
+      el.commentsList.innerHTML = `
+        <div class="empty-timeline-state">
+          <div class="empty-timeline-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <div class="empty-timeline-text">${escapeHTML(msg)}</div>
+        </div>
+      `;
+      return;
+    }
+
+    el.commentsList.innerHTML = displayComments.map(c => {
+      const isSys = isTimelineSystemEvent(c);
+
+      // 1. Compact System Event Pill
+      if (isSys) {
+        let sysIcon = '🔄';
+        if (c.text.includes('Task created')) sysIcon = '✨';
+        else if (c.text.includes('early')) sysIcon = '🚀';
+
+        return `
+          <div class="timeline-system-pill">
+            <div class="system-pill-content">
+              <span class="system-pill-icon">${sysIcon}</span>
+              <span class="system-pill-text">${escapeHTML(c.text)}</span>
+              <span class="system-pill-time">• ${formatTimeDisplay(c.timestamp)}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // 2. User Comment or Verified Proof Milestone
+      const isRoleAdmin = c.role === 'admin';
+      const isVerified = Boolean(c.isVerification || c.proofImage);
+      const authorName = c.author || (isRoleAdmin ? 'Admin' : 'Store');
+      const initials = authorName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 2).toUpperCase() || 'U';
+
+      let roleTagHtml = '';
+      if (isVerified) {
+        roleTagHtml = `<span class="timeline-role-tag tag-verified">Proof Verified ✓</span>`;
+      } else if (isRoleAdmin) {
+        roleTagHtml = `<span class="timeline-role-tag tag-admin">Admin HQ</span>`;
+      } else {
+        roleTagHtml = `<span class="timeline-role-tag tag-store">Store</span>`;
+      }
+
+      let avatarClass = isVerified ? 'avatar-verified' : (isRoleAdmin ? 'avatar-admin' : 'avatar-store');
+
+      return `
+        <div class="timeline-item">
+          <div class="timeline-avatar ${avatarClass}">
+            ${isVerified ? '✓' : escapeHTML(initials)}
+          </div>
+          <div class="timeline-card ${isVerified ? 'card-verified' : ''}">
+            <div class="timeline-card-header">
+              <div class="timeline-author-info">
+                <span class="timeline-author-name">${escapeHTML(authorName)}</span>
+                ${roleTagHtml}
+              </div>
+              <span class="timeline-time">${formatTimeDisplay(c.timestamp)}</span>
+            </div>
+            <p class="timeline-message">${escapeHTML(c.text)}</p>
+            ${c.proofImage ? `
+              <div class="timeline-proof-preview" onclick="window.assetApp.openLightbox('${c.proofImage}', '${escapeHTML(task.assetName)} — Verified Photo Proof (${formatDateDisplay(c.completionDate || c.timestamp)})')">
+                <img src="${c.proofImage}" alt="Verified Proof Thumbnail" class="timeline-proof-thumb">
+                <div class="timeline-proof-details">
+                  <span class="timeline-proof-title">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    Verified Maintenance Photo
+                  </span>
+                  <span class="timeline-proof-sub">Completed: ${formatDateDisplay(c.completionDate || c.timestamp)}</span>
+                  <span class="timeline-proof-cta">Click to view full image &rarr;</span>
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const drawerBody = document.querySelector('.drawer-body');
+    if (drawerBody) {
+      drawerBody.scrollTop = drawerBody.scrollHeight;
+    }
+  }
+
+  // Render Visual Photos & Proofs Gallery
+  function renderPhotosGallery(task, allPhotos) {
+    if (!el.photosGalleryGrid) return;
+
+    if (!allPhotos || allPhotos.length === 0) {
+      el.photosGalleryGrid.innerHTML = `
+        <div class="empty-timeline-state">
+          <div class="empty-timeline-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </div>
+          <div class="empty-timeline-text">No verified maintenance photos logged yet.</div>
+          <div class="empty-timeline-sub">When store managers complete cycles with photo proof, they will appear here.</div>
+        </div>
+      `;
+      return;
+    }
+
+    el.photosGalleryGrid.innerHTML = allPhotos.map((p, idx) => `
+      <div class="photo-proof-card">
+        <div class="photo-proof-img-wrap" onclick="window.assetApp.openLightbox('${p.src}', '${escapeHTML(task.assetName)} — Photo Proof (${formatDateDisplay(p.date)})')">
+          <img src="${p.src}" alt="Maintenance Proof ${idx + 1}" class="photo-proof-card-img">
+          <span class="photo-proof-cycle-badge">📸 Cycle Proof #${idx + 1}</span>
+          <span class="photo-proof-zoom-hint">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <line x1="11" y1="8" x2="11" y2="14"></line>
+              <line x1="8" y1="11" x2="14" y2="11"></line>
+            </svg>
+            Click to Enlarge
+          </span>
+        </div>
+        <div class="photo-proof-body">
+          <div class="photo-proof-meta-row">
+            <span class="photo-proof-inspector">👤 ${escapeHTML(p.author || 'Store Inspector')}</span>
+            <span>📅 ${formatDateDisplay(p.date)}</span>
+          </div>
+          ${p.remarks ? `<div class="photo-proof-remarks">"${escapeHTML(p.remarks)}"</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Open Comments & Timeline Drawer
   function openCommentsDrawer(taskId) {
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return;
@@ -2911,176 +3193,68 @@
     const meta = getStatusMeta(status);
     const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
 
-    el.drawerAssetName.textContent = task.assetName;
-    el.drawerAssetMeta.textContent = `${task.store} • ${task.serialNumber ? '#' + task.serialNumber : task.category}`;
-    el.drawerStatusBadge.textContent = displayMeta.label;
-    el.drawerStatusBadge.className = `status-chip ${displayMeta.className}`;
-    el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt)
-      ? `Completed: ${formatDateDisplay(task.completedAt)}`
-      : `Due: ${formatDateDisplay(task.dueDate)}`;
-    el.drawerConditionBadge.textContent = `Condition: ${task.condition}`;
-
-    if (task.description) {
-      el.drawerInstructionsText.textContent = task.description;
-      el.drawerInstructionsBox.classList.remove('hidden');
-    } else {
-      el.drawerInstructionsBox.classList.add('hidden');
+    if (el.drawerAssetName) el.drawerAssetName.textContent = task.assetName;
+    if (el.drawerAssetMeta) el.drawerAssetMeta.textContent = `${task.store} • ${task.serialNumber ? '#' + task.serialNumber : task.category}`;
+    if (el.drawerStatusBadge) {
+      el.drawerStatusBadge.textContent = displayMeta.label;
+      el.drawerStatusBadge.className = `status-chip ${displayMeta.className}`;
     }
-
-    // Collect all historical verified photos from comments and task.proofImage
-    const allPhotos = [];
-    if (task.comments && task.comments.length) {
-      task.comments.forEach(c => {
-        if (c.proofImage) {
-          allPhotos.push({
-            src: c.proofImage,
-            date: c.completionDate || c.timestamp,
-            author: c.author
-          });
-        }
-      });
+    if (el.drawerDueBadge) {
+      el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt)
+        ? `Completed: ${formatDateDisplay(task.completedAt)}`
+        : `Due: ${formatDateDisplay(task.dueDate)}`;
     }
-    if (task.proofImage && !allPhotos.some(p => p.src === task.proofImage)) {
-      allPhotos.unshift({
-        src: task.proofImage,
-        date: task.completedAt || task.completedTimestamp || 'Latest',
-        author: task.completedBy || 'Store'
-      });
-    }
+    if (el.drawerConditionBadge) el.drawerConditionBadge.textContent = `Condition: ${task.condition}`;
+    if (el.drawerCycleBadge) el.drawerCycleBadge.textContent = `Cycle: ${task.cycle || 'Monthly'}`;
 
-    if (allPhotos.length > 0) {
-      const latestPhoto = allPhotos[allPhotos.length - 1];
-      el.drawerProofImg.src = latestPhoto.src;
-      el.drawerProofImg.onclick = () => window.assetApp.openLightbox(latestPhoto.src, `${task.assetName} — Maintenance Photo (${formatDateDisplay(latestPhoto.date)})`);
-      if (el.drawerProofTitle) {
-        el.drawerProofTitle.textContent = `Verified Maintenance Photo (${formatDateDisplay(latestPhoto.date)})`;
-      }
-      el.drawerProofBox.classList.remove('hidden');
-
-      // If multiple cycles have photos, show the historical thumbnail gallery
-      if (allPhotos.length > 1 && el.drawerGalleryContainer && el.drawerGalleryStrip) {
-        el.drawerGalleryStrip.innerHTML = allPhotos.map((p, idx) => `
-          <div class="gallery-thumb-item ${idx === allPhotos.length - 1 ? 'active' : ''}" title="Cycle photo: ${formatDateDisplay(p.date)}" onclick="window.assetApp.selectDrawerPhoto('${task.id}', ${idx})">
-            <img src="${p.src}" alt="Proof ${idx + 1}" class="gallery-thumb-img">
-          </div>
-        `).join('');
-        el.drawerGalleryContainer.classList.remove('hidden');
-      } else if (el.drawerGalleryContainer) {
-        el.drawerGalleryContainer.classList.add('hidden');
-      }
-    } else {
-      el.drawerProofBox.classList.add('hidden');
-    }
-
-    el.commentAuthorLabel.textContent = getCurrentUserLabel();
-    renderCommentsList(task);
-
-    el.commentsDrawer.classList.remove('hidden');
-    setTimeout(() => {
-      el.commentsDrawer.classList.add('open');
-      el.commentsDrawer.setAttribute('aria-hidden', 'false');
-    }, 10);
-    el.commentInput.value = '';
-  }
-
-  function selectDrawerPhoto(taskId, photoIndex) {
-    const task = state.tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    const allPhotos = [];
-    if (task.comments && task.comments.length) {
-      task.comments.forEach(c => {
-        if (c.proofImage) {
-          allPhotos.push({
-            src: c.proofImage,
-            date: c.completionDate || c.timestamp,
-            author: c.author
-          });
-        }
-      });
-    }
-    if (task.proofImage && !allPhotos.some(p => p.src === task.proofImage)) {
-      allPhotos.unshift({
-        src: task.proofImage,
-        date: task.completedAt || task.completedTimestamp || 'Latest',
-        author: task.completedBy || 'Store'
-      });
-    }
-
-    if (allPhotos[photoIndex]) {
-      const selected = allPhotos[photoIndex];
-      el.drawerProofImg.src = selected.src;
-      el.drawerProofImg.onclick = () => window.assetApp.openLightbox(selected.src, `${task.assetName} — Maintenance Photo (${formatDateDisplay(selected.date)})`);
-      if (el.drawerProofTitle) {
-        el.drawerProofTitle.textContent = `Verified Maintenance Photo (${formatDateDisplay(selected.date)})`;
-      }
-
-      if (el.drawerGalleryStrip) {
-        const thumbItems = el.drawerGalleryStrip.querySelectorAll('.gallery-thumb-item');
-        thumbItems.forEach((t, i) => {
-          if (i === photoIndex) t.classList.add('active');
-          else t.classList.remove('active');
-        });
+    // Setup Instructions Accordion
+    if (el.drawerInstructionsBox && el.drawerInstructionsText) {
+      if (task.description) {
+        el.drawerInstructionsText.textContent = task.description;
+        el.drawerInstructionsBox.classList.remove('hidden');
+        el.drawerInstructionsBox.classList.remove('open');
+        if (el.drawerInstructionsContent) el.drawerInstructionsContent.classList.add('hidden');
+        if (el.drawerInstructionsToggle) el.drawerInstructionsToggle.setAttribute('aria-expanded', 'false');
+      } else {
+        el.drawerInstructionsBox.classList.add('hidden');
       }
     }
+
+    // Collect Photos & Comments for tab badges
+    const allPhotos = getTimelinePhotos(task);
+    const allComments = task.comments || [];
+    const remarksOnly = allComments.filter(c => !isTimelineSystemEvent(c));
+
+    if (el.tabAllCount) el.tabAllCount.textContent = allComments.length;
+    if (el.tabPhotosCount) el.tabPhotosCount.textContent = allPhotos.length;
+    if (el.tabRemarksCount) el.tabRemarksCount.textContent = remarksOnly.length;
+
+    // Render Quick Action Chips & Posting Author
+    renderDrawerQuickChips();
+    if (el.commentAuthorLabel) el.commentAuthorLabel.textContent = getCurrentUserLabel();
+
+    // Reset and switch to active tab
+    const initialTab = state.drawerActiveTab || 'all';
+    switchDrawerTab(initialTab);
+
+    if (el.commentsDrawer) {
+      el.commentsDrawer.classList.remove('hidden');
+      setTimeout(() => {
+        el.commentsDrawer.classList.add('open');
+        el.commentsDrawer.setAttribute('aria-hidden', 'false');
+      }, 10);
+    }
+    if (el.commentInput) el.commentInput.value = '';
   }
 
   function closeCommentsDrawer() {
+    if (!el.commentsDrawer) return;
     el.commentsDrawer.classList.remove('open');
     el.commentsDrawer.setAttribute('aria-hidden', 'true');
     setTimeout(() => {
       el.commentsDrawer.classList.add('hidden');
       state.activeDrawerTaskId = null;
     }, 280);
-  }
-
-  function renderCommentsList(task) {
-    const comments = task.comments || [];
-    el.commentsCount.textContent = comments.length;
-
-    if (comments.length === 0) {
-      el.commentsList.innerHTML = `<p class="no-comments-msg">No remarks or updates posted yet. Add a note below.</p>`;
-      return;
-    }
-
-    el.commentsList.innerHTML = comments.map(c => {
-      const isRoleAdmin = c.role === 'admin';
-      return `
-        <div class="comment-card ${c.isVerification ? 'verified-entry' : ''}">
-          <div class="comment-header">
-            <span class="comment-author">
-              ${escapeHTML(c.author)}
-              <span class="comment-role-badge ${c.isVerification ? 'badge-verified' : (isRoleAdmin ? 'role-admin' : 'role-store')}">
-                ${c.isVerification ? 'Proof Verified' : (isRoleAdmin ? 'Admin' : 'Store')}
-              </span>
-            </span>
-            <span class="comment-time">${formatTimeDisplay(c.timestamp)}</span>
-          </div>
-          <p class="comment-message">${escapeHTML(c.text)}</p>
-          ${c.proofImage ? `
-            <div class="comment-proof-attachment" onclick="window.assetApp.openLightbox('${c.proofImage}', '${escapeHTML(task.assetName)} — Verified Photo Proof (${formatDateDisplay(c.completionDate || c.timestamp)})')">
-              <img src="${c.proofImage}" alt="Verified Photo Proof" class="comment-proof-thumb">
-              <div class="comment-proof-info">
-                <span class="comment-proof-title">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                    <polyline points="21 15 16 10 5 21"></polyline>
-                  </svg>
-                  Verified Maintenance Photo
-                </span>
-                <span class="comment-proof-date">Completed: ${formatDateDisplay(c.completionDate || c.timestamp)} &bull; Click to enlarge</span>
-              </div>
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }).join('');
-
-    const drawerBody = document.querySelector('.drawer-body');
-    if (drawerBody) {
-      drawerBody.scrollTop = drawerBody.scrollHeight;
-    }
   }
 
   // Form Submit (Create / Edit) - Admin Only
@@ -3268,7 +3442,14 @@
       sender: getCurrentUserLabel()
     });
 
-    renderCommentsList(task);
+    // Update tab badges & refresh active view
+    const allPhotos = getTimelinePhotos(task);
+    const remarksOnly = (task.comments || []).filter(c => !isTimelineSystemEvent(c));
+    if (el.tabAllCount) el.tabAllCount.textContent = task.comments.length;
+    if (el.tabPhotosCount) el.tabPhotosCount.textContent = allPhotos.length;
+    if (el.tabRemarksCount) el.tabRemarksCount.textContent = remarksOnly.length;
+
+    switchDrawerTab(state.drawerActiveTab || 'all');
     render();
     el.commentInput.value = '';
     showToast('Remark posted and synced to Cloud');
@@ -3648,11 +3829,38 @@
     });
 
     // Drawer controls
-    el.btnDrawerClose.addEventListener('click', closeCommentsDrawer);
-    el.commentsDrawer.addEventListener('click', (e) => {
-      if (e.target === el.commentsDrawer) closeCommentsDrawer();
+    if (el.btnDrawerClose) el.btnDrawerClose.addEventListener('click', closeCommentsDrawer);
+    if (el.commentsDrawer) {
+      el.commentsDrawer.addEventListener('click', (e) => {
+        if (e.target === el.commentsDrawer) closeCommentsDrawer();
+      });
+    }
+    if (el.commentForm) el.commentForm.addEventListener('submit', handleCommentSubmit);
+
+    // Drawer Tabs Event Listeners
+    const drawerTabBtns = document.querySelectorAll('.drawer-tab-btn');
+    drawerTabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchDrawerTab(btn.dataset.tab);
+      });
     });
-    el.commentForm.addEventListener('submit', handleCommentSubmit);
+
+    // Drawer Instructions Accordion
+    if (el.drawerInstructionsToggle) {
+      el.drawerInstructionsToggle.addEventListener('click', toggleDrawerInstructions);
+    }
+
+    // Ctrl+Enter or Cmd+Enter to post comment quickly
+    if (el.commentInput) {
+      el.commentInput.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          if (el.commentForm) {
+            el.commentForm.requestSubmit ? el.commentForm.requestSubmit() : handleCommentSubmit(e);
+          }
+        }
+      });
+    }
 
     // Confirmation Modal
     if (el.confirmModal) {
@@ -3811,7 +4019,9 @@
   window.assetApp = {
     openEditModal: openTaskModal,
     openComments: openCommentsDrawer,
-    selectDrawerPhoto: selectDrawerPhoto,
+    switchDrawerTab: switchDrawerTab,
+    insertQuickChipText: insertQuickChipText,
+    toggleDrawerInstructions: toggleDrawerInstructions,
     triggerTaskCompletion: triggerTaskCompletion,
     startNextCycleEarly: startNextCycleEarly,
     useSamplePhoto: useSamplePhoto,

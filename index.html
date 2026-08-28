@@ -884,74 +884,120 @@
       </div>
     </div>
 
-    <!-- Drawer / Slide-Over: Comments & Task History -->
+    <!-- Drawer / Slide-Over: Comments, Activity Timeline & Photo Proofs -->
     <div id="comments-drawer" class="drawer-backdrop hidden" aria-hidden="true">
       <div class="drawer-panel">
         <div class="drawer-header">
-          <div>
-            <div class="drawer-pretitle">Task Activity & Comments</div>
+          <div class="drawer-header-info">
+            <div class="drawer-pretitle">Task Activity & Lifecycle</div>
             <h3 id="drawer-asset-name" class="drawer-title">Double Deck Pizza Oven</h3>
             <div id="drawer-asset-meta" class="drawer-subtitle">Store #101 • AST-001</div>
           </div>
           <button type="button" class="btn-close" id="btn-drawer-close" aria-label="Close comments panel">&times;</button>
         </div>
 
-        <div class="drawer-body">
-          <!-- Mini Task Quick Status Info -->
+        <!-- Task Metadata Chips Bar -->
+        <div class="drawer-meta-bar">
           <div class="drawer-task-badge-row">
             <span id="drawer-status-badge" class="status-chip chip-overdue">Overdue</span>
             <span id="drawer-due-badge" class="meta-chip">Due: Aug 20, 2026</span>
             <span id="drawer-condition-badge" class="meta-chip">Condition: Good</span>
+            <span id="drawer-cycle-badge" class="meta-chip">Cycle: Monthly</span>
           </div>
 
-          <!-- Instruction Callout -->
-          <div id="drawer-instructions-box" class="instructions-callout hidden">
-            <div class="callout-label">Instructions:</div>
-            <div id="drawer-instructions-text" class="callout-text"></div>
-          </div>
-
-          <!-- Attached Proof Image Preview if present -->
-          <div id="drawer-proof-box" class="proof-photo-section hidden">
-            <div class="proof-photo-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                <polyline points="21 15 16 10 5 21"></polyline>
+          <!-- Collapsible Instructions Bar -->
+          <div id="drawer-instructions-box" class="instructions-accordion hidden">
+            <button type="button" id="drawer-instructions-toggle" class="instructions-toggle-btn" aria-expanded="false">
+              <span class="instructions-toggle-left">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span>Task Instructions</span>
+              </span>
+              <svg class="accordion-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
-              <span id="drawer-proof-title">Verified Maintenance Photo</span>
-            </div>
-            <div class="proof-img-wrapper" id="drawer-proof-img-container">
-              <img id="drawer-proof-img" src="" alt="Completion photo proof" class="drawer-proof-thumbnail" onclick="window.assetApp.openLightbox(this.src, 'Completion Proof Photo')">
-            </div>
-            <div id="drawer-gallery-container" class="drawer-gallery-container hidden">
-              <div class="gallery-label">Maintenance Photo History:</div>
-              <div id="drawer-gallery-strip" class="drawer-photo-gallery"></div>
-            </div>
-          </div>
-
-          <!-- Comments Feed -->
-          <div class="comments-feed-wrapper">
-            <h4 class="feed-header">Updates & Remarks (<span id="comments-count">0</span>)</h4>
-            <div id="comments-list" class="comments-list">
-              <!-- Dynamically populated comments -->
+            </button>
+            <div id="drawer-instructions-content" class="instructions-content hidden">
+              <div id="drawer-instructions-text" class="callout-text"></div>
             </div>
           </div>
         </div>
 
-        <!-- Add Comment Form -->
-        <div class="drawer-footer">
-          <form id="comment-form" class="comment-input-area">
-            <div class="comment-author-badge">
-              Posting as: <strong id="comment-author-label">Admin</strong>
+        <!-- Segmented Filter Tabs -->
+        <div class="drawer-tabs-wrapper">
+          <div class="drawer-segmented-tabs" role="tablist">
+            <button type="button" class="drawer-tab-btn active" data-tab="all" role="tab" aria-selected="true">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="2"></circle>
+                <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"></path>
+              </svg>
+              <span>All Activity</span>
+              <span class="tab-badge" id="tab-all-count">0</span>
+            </button>
+            <button type="button" class="drawer-tab-btn" data-tab="photos" role="tab" aria-selected="false">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <span>Photos & Proofs</span>
+              <span class="tab-badge" id="tab-photos-count">0</span>
+            </button>
+            <button type="button" class="drawer-tab-btn" data-tab="remarks" role="tab" aria-selected="false">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Remarks Only</span>
+              <span class="tab-badge" id="tab-remarks-count">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="drawer-body">
+          <!-- Timeline View (For 'all' and 'remarks' tabs) -->
+          <div id="drawer-view-timeline" class="drawer-tab-view active">
+            <div id="comments-list" class="timeline-stream">
+              <!-- Dynamically populated timeline nodes -->
             </div>
-            <textarea id="comment-input" class="comment-textarea" placeholder="Add a comment, inspection note, or status update..." rows="2" required></textarea>
+          </div>
+
+          <!-- Photos & Proofs Gallery View (For 'photos' tab) -->
+          <div id="drawer-view-photos" class="drawer-tab-view hidden">
+            <div id="photos-gallery-grid" class="photos-gallery-grid">
+              <!-- Dynamically populated photo proof cards -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Comment / Quick Response Footer -->
+        <div class="drawer-footer">
+          <!-- Quick Preset Action Chips -->
+          <div class="quick-chips-section">
+            <div class="quick-chips-label">Quick Tags:</div>
+            <div id="drawer-quick-chips" class="quick-chips-container">
+              <!-- Dynamically populated quick chips based on role -->
+            </div>
+          </div>
+
+          <form id="comment-form" class="comment-input-area">
+            <div class="comment-form-header">
+              <div class="comment-author-badge">
+                <span class="author-pulse-dot"></span>
+                Posting as: <strong id="comment-author-label">Admin</strong>
+              </div>
+              <span class="kbd-shortcut-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to send</span>
+            </div>
+            <textarea id="comment-input" class="comment-textarea" placeholder="Add an inspection note, update, or question..." rows="2" required></textarea>
             <div class="comment-submit-row">
               <button type="submit" class="btn btn-primary btn-sm">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
-                <span>Post Comment</span>
+                <span>Post Note</span>
               </button>
             </div>
           </form>
