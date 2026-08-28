@@ -1688,8 +1688,17 @@
               </div>
               <div class="meta-item">
                 <span class="meta-label">Cycle / Condition</span>
-                <span class="meta-value">
-                  ${escapeHTML(task.cycle)} • <span class="condition-tag ${condClass}">${escapeHTML(task.condition)}</span>
+                <span class="meta-value" style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                  ${escapeHTML(task.cycle)} • 
+                  ${isAdmin() ? `
+                    <select class="select-condition-inline ${condClass}" onchange="window.assetApp.updateTaskCondition('${task.id}', this.value)" title="Change condition (Admin)">
+                      ${(state.conditions || []).map(cond => `
+                        <option value="${escapeHTML(cond)}" ${cond === task.condition ? 'selected' : ''}>${escapeHTML(cond)}</option>
+                      `).join('')}
+                    </select>
+                  ` : `
+                    <span class="condition-tag ${condClass}">${escapeHTML(task.condition)}</span>
+                  `}
                 </span>
               </div>
             </div>
@@ -1778,6 +1787,15 @@
 
   // Render Task Table View
   function renderTable(tasks) {
+    const thDate = document.getElementById('th-table-date');
+    if (thDate) {
+      thDate.textContent = isAdmin() ? 'Due Date' : 'Date Completed';
+    }
+    const thNextCycle = document.getElementById('th-table-next-cycle');
+    if (thNextCycle) {
+      thNextCycle.textContent = 'Next Cycle Date';
+    }
+
     if (tasks.length === 0) {
       el.taskTableBody.innerHTML = '';
       return;
@@ -1789,8 +1807,6 @@
       const isComplete = status === 'Completed';
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
-      const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => c.proofImage)));
-      const latestProof = task.proofImage || (task.comments && [...task.comments].reverse().find(c => c.proofImage)?.proofImage);
 
       const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
       const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
@@ -1800,7 +1816,7 @@
         const nextStatus = calculateDateStatus(nextCycleDate);
         nextMeta = getStatusMeta(nextStatus);
         nextCycleCell = `
-          <div><small>${formatDateDisplay(nextCycleDate)}</small></div>
+          <div><strong>${formatDateDisplay(nextCycleDate)}</strong></div>
           <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
             <span class="status-chip ${nextMeta.className}" style="font-size: 10px; padding: 1px 6px;">${nextMeta.label}</span>
             ${isComplete && !isAdmin() ? `
@@ -1808,9 +1824,44 @@
             ` : ''}
           </div>
         `;
+      } else {
+        nextCycleCell = `<span style="color: var(--text-subtle);">One-Time</span>`;
       }
 
       const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
+
+      let dateCellHtml = '';
+      if (!isAdmin()) {
+        if (isComplete || task.completedAt) {
+          dateCellHtml = `
+            <div><span style="color:#059669; font-weight:700;">Done: ${formatDateDisplay(task.completedAt || task.dueDate)}</span></div>
+            <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
+          `;
+        } else {
+          dateCellHtml = `
+            <div><span style="color:var(--text-main); font-weight:600;">${formatDateDisplay(task.dueDate)}</span></div>
+            <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
+          `;
+        }
+      } else {
+        dateCellHtml = `
+          <div>${isComplete ? `<span style="color:#059669; font-weight:700;">Done: ${formatDateDisplay(task.completedAt)}</span>` : `<span style="font-weight:600;">${formatDateDisplay(task.dueDate)}</span>`}</div>
+          <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
+        `;
+      }
+
+      let conditionCellHtml = '';
+      if (isAdmin()) {
+        conditionCellHtml = `
+          <select class="select-condition-inline ${condClass}" onchange="window.assetApp.updateTaskCondition('${task.id}', this.value)" title="Change condition (Admin)">
+            ${(state.conditions || []).map(cond => `
+              <option value="${escapeHTML(cond)}" ${cond === task.condition ? 'selected' : ''}>${escapeHTML(cond)}</option>
+            `).join('')}
+          </select>
+        `;
+      } else {
+        conditionCellHtml = `<span class="condition-tag ${condClass}">${escapeHTML(task.condition)}</span>`;
+      }
 
       return `
         <tr draggable="true" data-task-id="${task.id}">
@@ -1829,20 +1880,9 @@
             <div>${escapeHTML(task.store)}</div>
             <small style="color: var(--text-muted);">${escapeHTML(task.location)}</small>
           </td>
-          <td>
-            <div>${isComplete ? `<span style="color:#059669; font-weight:600;">Done: ${formatDateDisplay(task.completedAt)}</span>` : formatDateDisplay(task.dueDate)}</div>
-            <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
-          </td>
-          <td>
-            <span class="condition-tag ${condClass}">${escapeHTML(task.condition)}</span>
-          </td>
-          <td>
-            ${hasProof ? `
-              <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openLightbox('${latestProof}', '${escapeHTML(task.assetName)} — Proof')" title="View photo proof">
-                📷 View
-              </button>
-            ` : `<span style="color: var(--text-subtle);">—</span>`}
-          </td>
+          <td>${dateCellHtml}</td>
+          <td>${conditionCellHtml}</td>
+          <td>${nextCycleCell}</td>
           <td>
             <button class="btn-comments-trigger" onclick="window.assetApp.openComments('${task.id}')">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -3455,6 +3495,35 @@
     showToast('Remark posted and synced to Cloud');
   }
 
+  // Update Asset Condition (Admin Only)
+  function updateTaskCondition(taskId, newCondition) {
+    if (!isAdmin()) {
+      alert('Permission denied. Only Admins can modify asset conditions.');
+      return;
+    }
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const oldCondition = task.condition;
+    if (oldCondition === newCondition) return;
+
+    task.condition = newCondition;
+    task.comments = task.comments || [];
+    task.comments.push({
+      id: 'c-' + Date.now(),
+      author: 'Admin (HQ Operations)',
+      role: 'admin',
+      isSystemEvent: true,
+      text: `Admin updated condition from "${oldCondition}" to "${newCondition}".`,
+      timestamp: new Date().toISOString()
+    });
+
+    saveState();
+    syncTaskToCloud(task);
+    render();
+    showToast(`Asset condition updated to "${newCondition}"`);
+  }
+
   function escapeHTML(str) {
     if (!str) return '';
     return String(str)
@@ -4030,6 +4099,7 @@
     updateStorePin: updateStorePin,
     deleteStoreAccount: deleteStoreAccount,
     deleteTask: deleteTask,
+    updateTaskCondition: updateTaskCondition,
     addCustomCategory: addCustomCategory,
     addCustomCondition: addCustomCondition,
     createTaskForDate: createTaskForDate,
