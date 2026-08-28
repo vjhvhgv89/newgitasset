@@ -1601,9 +1601,9 @@
     }
 
     el.taskGrid.innerHTML = tasks.map(task => {
-      const status = (task.status === 'Completed') ? 'Completed' : calculateTaskStatus(task);
+      const status = calculateTaskStatus(task);
       const meta = getStatusMeta(status);
-      const isComplete = status === 'Completed';
+      const isComplete = status === 'Completed' || Boolean(task.completedAt);
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
 
@@ -1802,9 +1802,9 @@
     }
 
     el.taskTableBody.innerHTML = tasks.map(task => {
-      const status = (task.status === 'Completed') ? 'Completed' : calculateTaskStatus(task);
+      const status = calculateTaskStatus(task);
       const meta = getStatusMeta(status);
-      const isComplete = status === 'Completed';
+      const isComplete = status === 'Completed' || Boolean(task.completedAt);
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
 
@@ -3228,7 +3228,7 @@
     const nextStatus = hasNextCycle ? calculateDateStatus(nextCycleDate) : null;
     const nextMeta = nextStatus ? getStatusMeta(nextStatus) : null;
 
-    const status = (task.status === 'Completed') ? 'Completed' : calculateTaskStatus(task);
+    const status = calculateTaskStatus(task);
     const meta = getStatusMeta(status);
     const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
 
