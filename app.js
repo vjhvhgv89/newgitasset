@@ -164,9 +164,16 @@
     }
   }
 
-  // Calculate task status based on scheduled due date and completed state
+  // Calculate task status based on scheduled due date, next recurring cycle, and completed state
   function calculateTaskStatus(task) {
-    if (task.status === 'Completed' || task.completedAt) {
+    if (!task) return 'Upcoming';
+    const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
+    if (isComplete) {
+      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+      const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
+      if (hasNextCycle) {
+        return calculateDateStatus(nextCycleDate);
+      }
       return 'Completed';    // Green
     }
     return calculateDateStatus(task.dueDate);
@@ -1407,13 +1414,22 @@
         return false;
       }
 
-      const currentStatus = (task.status === 'Completed') ? 'completed' : task.status.toLowerCase().replace(/\s+/g, '-');
+      const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
+      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+      const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
+
+      const activeStatus = (isComplete && hasNextCycle)
+        ? calculateDateStatus(nextCycleDate)
+        : (!isComplete ? calculateDateStatus(task.dueDate) : 'Completed');
+
+      const activeStatusKey = activeStatus.toLowerCase().replace(/\s+/g, '-');
+
       if (state.filterStatus !== 'all') {
-        if (state.filterStatus === 'overdue' && currentStatus !== 'overdue') return false;
-        if (state.filterStatus === 'due-today' && currentStatus !== 'due-today') return false;
-        if (state.filterStatus === 'due-soon' && currentStatus !== 'due-soon') return false;
-        if (state.filterStatus === 'upcoming' && currentStatus !== 'upcoming') return false;
-        if (state.filterStatus === 'completed' && currentStatus !== 'completed') return false;
+        if (state.filterStatus === 'completed') {
+          if (!isComplete) return false;
+        } else {
+          if (activeStatusKey !== state.filterStatus) return false;
+        }
       }
 
       if (state.filterCategory !== 'all' && task.category !== state.filterCategory) {
@@ -1440,8 +1456,8 @@
       if (state.sortBy === 'custom') {
         return 0;
       } else if (state.sortBy === 'urgency') {
-        const metaA = getStatusMeta(a.status);
-        const metaB = getStatusMeta(b.status);
+        const metaA = getStatusMeta(calculateTaskStatus(a));
+        const metaB = getStatusMeta(calculateTaskStatus(b));
         if (metaA.rank !== metaB.rank) return metaA.rank - metaB.rank;
         return (a.dueDate || '').localeCompare(b.dueDate || '');
       } else if (state.sortBy === 'date-asc') {
@@ -1471,12 +1487,22 @@
     let completed = 0;
 
     scopeTasks.forEach(t => {
-      const s = (t.status === 'Completed') ? 'Completed' : calculateTaskStatus(t);
-      if (s === 'Overdue') overdue++;
-      else if (s === 'Due Today') dueToday++;
-      else if (s === 'Due Soon') dueSoon++;
-      else if (s === 'Upcoming') upcoming++;
-      else if (s === 'Completed') completed++;
+      const isComplete = (t.status === 'Completed' || Boolean(t.completedAt));
+      const nextCycleDate = t.nextCycleDueDate || calculateNextCycleDate(t.dueDate || TODAY_STR, t.cycle);
+      const hasNextCycle = Boolean(nextCycleDate && t.cycle && t.cycle !== 'One-Time Inspection');
+
+      if (isComplete) {
+        completed++;
+      }
+
+      const activeStatus = (isComplete && hasNextCycle)
+        ? calculateDateStatus(nextCycleDate)
+        : (!isComplete ? calculateDateStatus(t.dueDate) : null);
+
+      if (activeStatus === 'Overdue') overdue++;
+      else if (activeStatus === 'Due Today') dueToday++;
+      else if (activeStatus === 'Due Soon') dueSoon++;
+      else if (activeStatus === 'Upcoming') upcoming++;
     });
 
     // KPI Header counters
@@ -1583,10 +1609,11 @@
       let nextCycleMarkup = '';
       const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
       const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
+      let nextMeta = null;
 
       if (hasNextCycle) {
         const nextStatus = calculateDateStatus(nextCycleDate);
-        const nextMeta = getStatusMeta(nextStatus);
+        nextMeta = getStatusMeta(nextStatus);
         nextCycleMarkup = `
           <div class="next-cycle-strip" title="Next recurring maintenance scheduled: ${formatDateDisplay(nextCycleDate)}">
             <span class="next-cycle-label">
@@ -1610,6 +1637,8 @@
         `;
       }
 
+      const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
+
       return `
         <article class="task-card" draggable="true" data-id="${task.id}" data-task-id="${task.id}">
           <div>
@@ -1631,9 +1660,9 @@
                   ${task.serialNumber ? `<span class="task-id-badge">#${escapeHTML(task.serialNumber)}</span>` : ''}
                 </h3>
               </div>
-              <span class="status-chip ${meta.className}">
-                <span class="status-dot ${meta.dotClass}"></span>
-                ${meta.label}
+              <span class="status-chip ${displayMeta.className}">
+                <span class="status-dot ${displayMeta.dotClass}"></span>
+                ${displayMeta.label}
               </span>
             </div>
 
@@ -1760,10 +1789,11 @@
 
       const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
       const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
+      let nextMeta = null;
       let nextCycleCell = '—';
       if (hasNextCycle) {
         const nextStatus = calculateDateStatus(nextCycleDate);
-        const nextMeta = getStatusMeta(nextStatus);
+        nextMeta = getStatusMeta(nextStatus);
         nextCycleCell = `
           <div><small>${formatDateDisplay(nextCycleDate)}</small></div>
           <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
@@ -1775,12 +1805,14 @@
         `;
       }
 
+      const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
+
       return `
         <tr draggable="true" data-task-id="${task.id}">
           <td>
-            <span class="status-chip ${meta.className}">
-              <span class="status-dot ${meta.dotClass}"></span>
-              ${meta.label}
+            <span class="status-chip ${displayMeta.className}">
+              <span class="status-dot ${displayMeta.dotClass}"></span>
+              ${displayMeta.label}
             </span>
           </td>
           <td>
@@ -2869,13 +2901,20 @@
     if (!task) return;
 
     state.activeDrawerTaskId = taskId;
+    const isComplete = task.status === 'Completed' || Boolean(task.completedAt);
+    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+    const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
+    const nextStatus = hasNextCycle ? calculateDateStatus(nextCycleDate) : null;
+    const nextMeta = nextStatus ? getStatusMeta(nextStatus) : null;
+
     const status = (task.status === 'Completed') ? 'Completed' : calculateTaskStatus(task);
     const meta = getStatusMeta(status);
+    const displayMeta = (isComplete && hasNextCycle && nextMeta) ? nextMeta : meta;
 
     el.drawerAssetName.textContent = task.assetName;
     el.drawerAssetMeta.textContent = `${task.store} • ${task.serialNumber ? '#' + task.serialNumber : task.category}`;
-    el.drawerStatusBadge.textContent = meta.label;
-    el.drawerStatusBadge.className = `status-chip ${meta.className}`;
+    el.drawerStatusBadge.textContent = displayMeta.label;
+    el.drawerStatusBadge.className = `status-chip ${displayMeta.className}`;
     el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt)
       ? `Completed: ${formatDateDisplay(task.completedAt)}`
       : `Due: ${formatDateDisplay(task.dueDate)}`;
