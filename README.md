@@ -10,7 +10,7 @@ A simple, user-friendly, responsive asset and task operations management system 
   - ⚪ **Upcoming** (Gray)
   - 🟢 **Completed** (Green)
 - **Role-Based Workflows**:
-  - **Administrator Account** (`admin@assetflow.com` / `admin123`): Task creation, assignment, specific next maintenance cycle date scheduling, custom categories & conditions creation, store branch credentials management, and task reopening.
+  - **Administrator Account** (`admin` / `admin010211`): Task creation, assignment, specific next maintenance cycle date scheduling, custom categories & conditions creation, store branch credentials management, and task reopening.
   - **Store Accounts**: Branch login via PIN, mark tasks complete with mandatory date of completion, proof photos & remarks, and communication notes.
 - **Left Sidebar Navigation & Off-Canvas Mobile Drawer**:
   - Sticky left sidebar with live status counter badges and quick management links.

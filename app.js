@@ -3795,10 +3795,10 @@
         }
 
         const validUser = (user.toLowerCase() === 'admin' || user.toLowerCase() === 'admin@assetflow.com');
-        const validPass = (pass === 'admin123' || pass === 'admin010211' || pass === 'admin');
+        const validPass = (pass === 'admin010211');
 
         if (!validUser || !validPass) {
-          el.loginErrorMsg.textContent = 'Incorrect admin username or password. (Password: admin123)';
+          el.loginErrorMsg.textContent = 'Incorrect admin username or password.';
           el.loginErrorMsg.classList.remove('hidden');
           return;
         }
