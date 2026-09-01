@@ -189,9 +189,31 @@
   function getTaskDisplayStatus(task) {
     if (!task) return 'Upcoming';
     const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-    if (isComplete) {
-      return 'Completed';    // Green
+    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+    const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
+    const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
+
+    // If specific filter is active, align chip directly to filtered context
+    if (state.filterStatus === 'completed' && isComplete) {
+      return 'Completed';
     }
+    if (state.filterStatus === 'overdue' && isComplete && nextCycleStatus === 'Overdue') {
+      return 'Overdue';
+    }
+    if (state.filterStatus === 'due-today' && isComplete && nextCycleStatus === 'Due Today') {
+      return 'Due Today';
+    }
+    if (state.filterStatus === 'due-soon' && isComplete && nextCycleStatus === 'Due Soon') {
+      return 'Due Soon';
+    }
+    if (state.filterStatus === 'upcoming' && isComplete && nextCycleStatus === 'Upcoming') {
+      return 'Upcoming';
+    }
+
+    if (isComplete) {
+      return 'Completed';
+    }
+
     return calculateDateStatus(task.dueDate);
   }
 
@@ -1475,15 +1497,30 @@
       }
 
       const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-      const activeStatus = isComplete ? 'Completed' : calculateDateStatus(task.dueDate);
-      const activeStatusKey = activeStatus.toLowerCase().replace(/\s+/g, '-');
+      const primaryStatus = calculateDateStatus(task.dueDate);
+      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+      const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
+      const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
 
       if (state.filterStatus !== 'all') {
         if (state.filterStatus === 'completed') {
           if (!isComplete) return false;
-        } else {
-          if (isComplete) return false;
-          if (activeStatusKey !== state.filterStatus) return false;
+        } else if (state.filterStatus === 'overdue') {
+          const matchPrimary = !isComplete && primaryStatus === 'Overdue';
+          const matchNext = isComplete && nextCycleStatus === 'Overdue';
+          if (!matchPrimary && !matchNext) return false;
+        } else if (state.filterStatus === 'due-today') {
+          const matchPrimary = !isComplete && primaryStatus === 'Due Today';
+          const matchNext = isComplete && nextCycleStatus === 'Due Today';
+          if (!matchPrimary && !matchNext) return false;
+        } else if (state.filterStatus === 'due-soon') {
+          const matchPrimary = !isComplete && primaryStatus === 'Due Soon';
+          const matchNext = isComplete && nextCycleStatus === 'Due Soon';
+          if (!matchPrimary && !matchNext) return false;
+        } else if (state.filterStatus === 'upcoming') {
+          const matchPrimary = !isComplete && primaryStatus === 'Upcoming';
+          const matchNext = isComplete && nextCycleStatus === 'Upcoming';
+          if (!matchPrimary && !matchNext) return false;
         }
       }
 
@@ -1543,15 +1580,22 @@
 
     scopeTasks.forEach(t => {
       const isComplete = (t.status === 'Completed' || Boolean(t.completedAt));
+      const primaryStatus = calculateDateStatus(t.dueDate);
+      const nextCycleDate = t.nextCycleDueDate || calculateNextCycleDate(t.dueDate || TODAY_STR, t.cycle);
+      const hasNextCycle = Boolean(nextCycleDate && t.cycle && t.cycle !== 'One-Time Inspection');
+      const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
 
       if (isComplete) {
         completed++;
+        if (nextCycleStatus === 'Overdue') overdue++;
+        else if (nextCycleStatus === 'Due Today') dueToday++;
+        else if (nextCycleStatus === 'Due Soon') dueSoon++;
+        else if (nextCycleStatus === 'Upcoming') upcoming++;
       } else {
-        const status = calculateDateStatus(t.dueDate);
-        if (status === 'Overdue') overdue++;
-        else if (status === 'Due Today') dueToday++;
-        else if (status === 'Due Soon') dueSoon++;
-        else if (status === 'Upcoming') upcoming++;
+        if (primaryStatus === 'Overdue') overdue++;
+        else if (primaryStatus === 'Due Today') dueToday++;
+        else if (primaryStatus === 'Due Soon') dueSoon++;
+        else if (primaryStatus === 'Upcoming') upcoming++;
       }
     });
 
@@ -1728,8 +1772,8 @@
                 <span class="meta-value" title="${escapeHTML(task.store)}">${escapeHTML(task.store)}</span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">${isComplete ? 'Completed Date' : 'Due Date'}</span>
-                <span class="meta-value">${isComplete ? formatDateDisplay(task.completedAt) : formatDateDisplay(task.dueDate)}</span>
+                <span class="meta-label">${(state.filterStatus === 'completed' || (isComplete && state.filterStatus === 'all')) ? 'Completed Date' : 'Due Date'}</span>
+                <span class="meta-value">${(state.filterStatus === 'completed' || (isComplete && state.filterStatus === 'all')) ? formatDateDisplay(task.completedAt) : formatDateDisplay((isComplete && hasNextCycle) ? nextCycleDate : task.dueDate)}</span>
               </div>
               <div class="meta-item">
                 <span class="meta-label">Cycle / Condition</span>
