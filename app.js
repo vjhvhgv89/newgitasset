@@ -146,6 +146,16 @@
       d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
+  function escapeHTML(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // Calculate status for any date string relative to reference date (August 24, 2026)
   function calculateDateStatus(dateStr) {
     if (!dateStr) return 'Upcoming';
@@ -170,11 +180,6 @@
     if (!task) return 'Upcoming';
     const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
     if (isComplete) {
-      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-      const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
-      if (hasNextCycle) {
-        return calculateDateStatus(nextCycleDate);
-      }
       return 'Completed';    // Green
     }
     return calculateDateStatus(task.dueDate);
@@ -184,33 +189,9 @@
   function getTaskDisplayStatus(task) {
     if (!task) return 'Upcoming';
     const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-    const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
-
-    // If specific filter is active, align chip directly to filtered context
-    if (state.filterStatus === 'completed' && isComplete) {
-      return 'Completed';
-    }
-    if (state.filterStatus === 'overdue' && isComplete && hasNextCycle) {
-      return calculateDateStatus(nextCycleDate);
-    }
-    if (state.filterStatus === 'due-today' && isComplete && hasNextCycle) {
-      return calculateDateStatus(nextCycleDate);
-    }
-    if (state.filterStatus === 'due-soon' && isComplete && hasNextCycle) {
-      return calculateDateStatus(nextCycleDate);
-    }
-    if (state.filterStatus === 'upcoming' && isComplete && hasNextCycle) {
-      return calculateDateStatus(nextCycleDate);
-    }
-
     if (isComplete) {
-      if (hasNextCycle) {
-        return calculateDateStatus(nextCycleDate);
-      }
-      return 'Completed';
+      return 'Completed';    // Green
     }
-
     return calculateDateStatus(task.dueDate);
   }
 
@@ -384,7 +365,26 @@
       const cloudTasks = [];
       snapshot.forEach(doc => {
         const t = doc.data();
-        if (t.status !== 'Completed') {
+        const docData = doc.data();
+        const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))))));
+
+        if (t.status === 'Completed' || hasVerification) {
+          const wasNotCompletedInDoc = docData.status !== 'Completed';
+          t.status = 'Completed';
+          if (!t.completedAt && t.comments) {
+            const verif = [...t.comments].reverse().find(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))));
+            if (verif) {
+              t.completedAt = verif.completionDate || (verif.timestamp ? verif.timestamp.split('T')[0] : TODAY_STR);
+              if (!t.completedBy && verif.author) {
+                t.completedBy = verif.author.split('(')[0].trim();
+              }
+            }
+          }
+          if (!t.completedAt) t.completedAt = TODAY_STR;
+          if (wasNotCompletedInDoc) {
+            syncTaskToCloud(t);
+          }
+        } else {
           t.status = calculateTaskStatus(t);
         }
         cloudTasks.push(t);
@@ -525,9 +525,28 @@
     }
 
     state.tasks.forEach(t => {
-      if (t.status !== 'Completed') {
+      const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))))));
+
+      if (t.status === 'Completed' || t.completedAt || hasVerification) {
+        const wasNotCompleted = t.status !== 'Completed';
+        t.status = 'Completed';
+        if (!t.completedAt && t.comments) {
+          const verif = [...t.comments].reverse().find(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))));
+          if (verif) {
+            t.completedAt = verif.completionDate || (verif.timestamp ? verif.timestamp.split('T')[0] : TODAY_STR);
+            if (!t.completedBy && verif.author) {
+              t.completedBy = verif.author.split('(')[0].trim();
+            }
+          }
+        }
+        if (!t.completedAt) t.completedAt = TODAY_STR;
+        if (wasNotCompleted) {
+          syncTaskToCloud(t);
+        }
+      } else {
         t.status = calculateTaskStatus(t);
       }
+
       if (t.proofImage && t.comments && t.comments.length) {
         const verifComment = [...t.comments].reverse().find(c => c.isVerification);
         if (verifComment && !verifComment.proofImage) {
@@ -535,6 +554,7 @@
         }
       }
     });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
   }
 
   // DOM Elements Cache
@@ -727,6 +747,7 @@
     lightboxImage: document.getElementById('lightbox-image'),
     lightboxCaption: document.getElementById('lightbox-caption'),
     btnLightboxClose: document.getElementById('btn-lightbox-close'),
+    btnLightboxNewTab: document.getElementById('btn-lightbox-newtab'),
 
     // Confirmation Dialog Card Modal
     confirmModal: document.getElementById('confirm-modal'),
@@ -1454,19 +1475,14 @@
       }
 
       const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-      const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
-
-      const activeStatus = (isComplete && hasNextCycle)
-        ? calculateDateStatus(nextCycleDate)
-        : (!isComplete ? calculateDateStatus(task.dueDate) : 'Completed');
-
+      const activeStatus = isComplete ? 'Completed' : calculateDateStatus(task.dueDate);
       const activeStatusKey = activeStatus.toLowerCase().replace(/\s+/g, '-');
 
       if (state.filterStatus !== 'all') {
         if (state.filterStatus === 'completed') {
           if (!isComplete) return false;
         } else {
+          if (isComplete) return false;
           if (activeStatusKey !== state.filterStatus) return false;
         }
       }
@@ -1527,21 +1543,16 @@
 
     scopeTasks.forEach(t => {
       const isComplete = (t.status === 'Completed' || Boolean(t.completedAt));
-      const nextCycleDate = t.nextCycleDueDate || calculateNextCycleDate(t.dueDate || TODAY_STR, t.cycle);
-      const hasNextCycle = Boolean(nextCycleDate && t.cycle && t.cycle !== 'One-Time Inspection');
 
       if (isComplete) {
         completed++;
+      } else {
+        const status = calculateDateStatus(t.dueDate);
+        if (status === 'Overdue') overdue++;
+        else if (status === 'Due Today') dueToday++;
+        else if (status === 'Due Soon') dueSoon++;
+        else if (status === 'Upcoming') upcoming++;
       }
-
-      const activeStatus = (isComplete && hasNextCycle)
-        ? calculateDateStatus(nextCycleDate)
-        : (!isComplete ? calculateDateStatus(t.dueDate) : null);
-
-      if (activeStatus === 'Overdue') overdue++;
-      else if (activeStatus === 'Due Today') dueToday++;
-      else if (activeStatus === 'Due Soon') dueSoon++;
-      else if (activeStatus === 'Upcoming') upcoming++;
     });
 
     // KPI Header counters
@@ -1770,6 +1781,12 @@
                 ` : ''}
 
                 ${hasNextCycle && !isAdmin() ? `
+                  <span class="completed-lock-badge" title="Completed on ${formatDateDisplay(task.completedAt)}">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    Done (${formatDateDisplay(task.completedAt)})
+                  </span>
                   <button class="btn btn-primary btn-sm btn-start-cycle" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start next maintenance cycle early">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                       <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -2789,6 +2806,8 @@
       author: `${staffName} (${task.store})`,
       role: isAdmin() ? 'admin' : 'store',
       text: `✅ Task Completed on ${formatDateDisplay(completionDate)} by ${staffName} & Verified\nRemarks: ${remarks}${nextStatusText}`,
+      remarks: remarks,
+      nextScheduleText: nextStatusText ? nextStatusText.trim() : '',
       proofImage: proofUrl,
       completionDate: completionDate,
       timestamp: nowIso,
@@ -3011,6 +3030,68 @@
     return allPhotos;
   }
 
+  // Helper: Parse structured details from a timeline comment
+  function parseTimelineComment(c, task) {
+    if (!c) return { isSys: true, text: '', timestamp: '' };
+    const isSys = isTimelineSystemEvent(c);
+    if (isSys) {
+      return { isSys: true, text: c.text, timestamp: c.timestamp };
+    }
+
+    const rawText = (c.text || '').trim();
+    const hasProof = Boolean(c.proofImage);
+    const isVerification = Boolean(c.isVerification || hasProof || rawText.includes('Task Completed') || rawText.includes('Task Completed on'));
+
+    if (!isVerification) {
+      return {
+        isSys: false,
+        isVerification: false,
+        author: c.author || (c.role === 'admin' ? 'Admin' : 'Store Staff'),
+        role: c.role || 'store',
+        message: rawText,
+        proofImage: c.proofImage || null,
+        timestamp: c.timestamp
+      };
+    }
+
+    // Parse verification milestone details
+    let completionDate = c.completionDate || (task && task.completedAt) || '';
+    let remarks = c.remarks || '';
+    let nextCycleInfo = c.nextScheduleText || '';
+
+    if (!remarks || !nextCycleInfo) {
+      const lines = rawText.split('\n');
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed.includes('Next') && (trimmed.includes('Maintenance Scheduled') || trimmed.includes('cycle') || trimmed.includes('Upcoming') || trimmed.includes('Scheduled:'))) {
+          nextCycleInfo = trimmed.replace(/^[\s\n•-]+/, '').trim();
+        } else if (trimmed.includes('Remarks:')) {
+          const idx = trimmed.indexOf('Remarks:');
+          remarks = trimmed.substring(idx + 8).trim();
+        } else if (!trimmed.startsWith('✅') && !trimmed.startsWith('Task Completed') && !trimmed.startsWith('Completed:')) {
+          if (!remarks) remarks = trimmed;
+          else if (!remarks.includes(trimmed)) remarks += ' ' + trimmed;
+        }
+      });
+    }
+
+    if (!remarks && task && task.completionRemarks) {
+      remarks = task.completionRemarks;
+    }
+
+    return {
+      isSys: false,
+      isVerification: true,
+      author: c.author || (task && task.completedBy ? `${task.completedBy} (${task.store})` : (c.role === 'admin' ? 'Admin' : 'Store Staff')),
+      role: c.role || 'store',
+      completionDate: completionDate,
+      remarks: remarks,
+      nextCycleInfo: nextCycleInfo,
+      proofImage: c.proofImage || null,
+      timestamp: c.timestamp
+    };
+  }
+
   // Toggle Instructions Accordion in Drawer
   function toggleDrawerInstructions() {
     if (!el.drawerInstructionsBox || !el.drawerInstructionsContent) return;
@@ -3120,69 +3201,128 @@
     }
 
     el.commentsList.innerHTML = displayComments.map(c => {
-      const isSys = isTimelineSystemEvent(c);
+      const parsed = parseTimelineComment(c, task);
 
       // 1. Compact System Event Pill
-      if (isSys) {
+      if (parsed.isSys) {
         let sysIcon = '🔄';
-        if (c.text.includes('Task created')) sysIcon = '✨';
-        else if (c.text.includes('early')) sysIcon = '🚀';
+        if (parsed.text.includes('Task created')) sysIcon = '✨';
+        else if (parsed.text.includes('early')) sysIcon = '🚀';
 
         return `
           <div class="timeline-system-pill">
             <div class="system-pill-content">
               <span class="system-pill-icon">${sysIcon}</span>
-              <span class="system-pill-text">${escapeHTML(c.text)}</span>
-              <span class="system-pill-time">• ${formatTimeDisplay(c.timestamp)}</span>
+              <span class="system-pill-text">${escapeHTML(parsed.text)}</span>
+              <span class="system-pill-time">• ${formatTimeDisplay(parsed.timestamp)}</span>
             </div>
           </div>
         `;
       }
 
-      // 2. User Comment or Verified Proof Milestone
-      const isRoleAdmin = c.role === 'admin';
-      const isVerified = Boolean(c.isVerification || c.proofImage);
-      const authorName = c.author || (isRoleAdmin ? 'Admin' : 'Store');
+      const isRoleAdmin = parsed.role === 'admin';
+      const authorName = parsed.author;
       const initials = authorName.replace(/[^a-zA-Z0-9]/g, '').substring(0, 2).toUpperCase() || 'U';
 
-      let roleTagHtml = '';
-      if (isVerified) {
-        roleTagHtml = `<span class="timeline-role-tag tag-verified">Proof Verified ✓</span>`;
-      } else if (isRoleAdmin) {
-        roleTagHtml = `<span class="timeline-role-tag tag-admin">Admin HQ</span>`;
-      } else {
-        roleTagHtml = `<span class="timeline-role-tag tag-store">Store</span>`;
+      // 2. Verified Completion Milestone Card
+      if (parsed.isVerification) {
+        const photoUrl = parsed.proofImage;
+        const compDateStr = parsed.completionDate ? formatDateDisplay(parsed.completionDate) : formatTimeDisplay(parsed.timestamp);
+
+        return `
+          <div class="timeline-item">
+            <div class="timeline-avatar avatar-verified">
+              ✓
+            </div>
+            <div class="timeline-card card-verified">
+              <div class="timeline-card-header">
+                <div class="timeline-author-info">
+                  <span class="timeline-author-name">${escapeHTML(authorName)}</span>
+                  <span class="timeline-role-tag tag-verified">Proof Verified ✓</span>
+                </div>
+                <span class="timeline-time">${formatTimeDisplay(parsed.timestamp)}</span>
+              </div>
+
+              <!-- Structured Completion Summary Strip -->
+              <div class="timeline-completion-strip">
+                <div class="timeline-completion-row">
+                  <span>✅ <strong>Maintenance Completed:</strong></span>
+                  <span class="highlight-date">${compDateStr}</span>
+                </div>
+                ${parsed.nextCycleInfo ? `
+                  <div class="timeline-next-schedule-row">
+                    <span>🗓️ ${escapeHTML(parsed.nextCycleInfo)}</span>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- Staff Remarks Box -->
+              ${parsed.remarks ? `
+                <div class="timeline-remarks-card">
+                  <div class="timeline-remarks-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Staff Remarks:
+                  </div>
+                  <div class="timeline-remarks-text">"${escapeHTML(parsed.remarks)}"</div>
+                </div>
+              ` : ''}
+
+              <!-- Photo Proof Attached Preview -->
+              ${photoUrl ? `
+                <div class="timeline-proof-preview" onclick="window.assetApp.openLightbox('${photoUrl}', '${escapeHTML(task.assetName)} — Verified Photo Proof (${compDateStr})')">
+                  <img src="${photoUrl}" alt="Verified Proof Thumbnail" class="timeline-proof-thumb">
+                  <div class="timeline-proof-details">
+                    <span class="timeline-proof-title">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                      Verified Maintenance Photo
+                    </span>
+                    <span class="timeline-proof-sub">Completed on ${compDateStr}</span>
+                    <span class="timeline-proof-cta">
+                      <span>Click to view full image</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
       }
 
-      let avatarClass = isVerified ? 'avatar-verified' : (isRoleAdmin ? 'avatar-admin' : 'avatar-store');
+      // 3. Regular Note / Communication Comment
+      const roleTagHtml = isRoleAdmin
+        ? `<span class="timeline-role-tag tag-admin">Admin HQ</span>`
+        : `<span class="timeline-role-tag tag-store">Store</span>`;
+      const avatarClass = isRoleAdmin ? 'avatar-admin' : 'avatar-store';
 
       return `
         <div class="timeline-item">
           <div class="timeline-avatar ${avatarClass}">
-            ${isVerified ? '✓' : escapeHTML(initials)}
+            ${escapeHTML(initials)}
           </div>
-          <div class="timeline-card ${isVerified ? 'card-verified' : ''}">
+          <div class="timeline-card">
             <div class="timeline-card-header">
               <div class="timeline-author-info">
                 <span class="timeline-author-name">${escapeHTML(authorName)}</span>
                 ${roleTagHtml}
               </div>
-              <span class="timeline-time">${formatTimeDisplay(c.timestamp)}</span>
+              <span class="timeline-time">${formatTimeDisplay(parsed.timestamp)}</span>
             </div>
-            <p class="timeline-message">${escapeHTML(c.text)}</p>
-            ${c.proofImage ? `
-              <div class="timeline-proof-preview" onclick="window.assetApp.openLightbox('${c.proofImage}', '${escapeHTML(task.assetName)} — Verified Photo Proof (${formatDateDisplay(c.completionDate || c.timestamp)})')">
-                <img src="${c.proofImage}" alt="Verified Proof Thumbnail" class="timeline-proof-thumb">
+            <p class="timeline-message">${escapeHTML(parsed.message)}</p>
+            ${parsed.proofImage ? `
+              <div class="timeline-proof-preview" onclick="window.assetApp.openLightbox('${parsed.proofImage}', '${escapeHTML(task.assetName)} — Photo Attachment')">
+                <img src="${parsed.proofImage}" alt="Attachment Thumbnail" class="timeline-proof-thumb">
                 <div class="timeline-proof-details">
-                  <span class="timeline-proof-title">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                      <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                    Verified Maintenance Photo
-                  </span>
-                  <span class="timeline-proof-sub">Completed: ${formatDateDisplay(c.completionDate || c.timestamp)}</span>
+                  <span class="timeline-proof-title">📸 Attached Image</span>
                   <span class="timeline-proof-cta">Click to view full image &rarr;</span>
                 </div>
               </div>
@@ -3920,10 +4060,24 @@
     });
 
     // Lightbox Modal
-    el.btnLightboxClose.addEventListener('click', closeLightbox);
-    el.lightboxModal.addEventListener('click', (e) => {
-      if (e.target === el.lightboxModal) closeLightbox();
-    });
+    if (el.btnLightboxClose) el.btnLightboxClose.addEventListener('click', closeLightbox);
+    if (el.btnLightboxNewTab) {
+      el.btnLightboxNewTab.addEventListener('click', () => {
+        if (el.lightboxImage && el.lightboxImage.src) {
+          const win = window.open();
+          if (win) {
+            const captionText = el.lightboxCaption ? el.lightboxCaption.textContent : 'AssetFlow Photo Proof';
+            win.document.write(`<!DOCTYPE html><html><head><title>${captionText}</title><style>body{margin:0;background:#090D16;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#fff;}img{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,0.6);}p{margin-top:12px;font-size:14px;color:#94a3b8;}</style></head><body><img src="${el.lightboxImage.src}"><p>${captionText}</p></body></html>`);
+            win.document.close();
+          }
+        }
+      });
+    }
+    if (el.lightboxModal) {
+      el.lightboxModal.addEventListener('click', (e) => {
+        if (e.target === el.lightboxModal) closeLightbox();
+      });
+    }
 
     // Drawer controls
     if (el.btnDrawerClose) el.btnDrawerClose.addEventListener('click', closeCommentsDrawer);
@@ -4025,15 +4179,39 @@
 
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
+        if (el.lightboxModal && el.lightboxModal.classList.contains('open')) {
+          closeLightbox();
+          return;
+        }
+        if (el.confirmModal && el.confirmModal.classList.contains('open')) {
+          closeConfirmModal();
+          return;
+        }
+        if (el.exportModal && el.exportModal.classList.contains('open')) {
+          closeExportModal();
+          return;
+        }
+        if (el.storeManagementModal && el.storeManagementModal.classList.contains('open')) {
+          closeStoreManagementModal();
+          return;
+        }
+        if (el.completionModal && el.completionModal.classList.contains('open')) {
+          closeCompletionModal();
+          return;
+        }
+        if (el.taskModal && el.taskModal.classList.contains('open')) {
+          closeTaskModal();
+          return;
+        }
+        if (el.notificationDropdown && !el.notificationDropdown.classList.contains('hidden')) {
+          closeNotificationDropdown();
+          return;
+        }
+        if (el.commentsDrawer && el.commentsDrawer.classList.contains('open')) {
+          closeCommentsDrawer();
+          return;
+        }
         closeSidebar();
-        closeNotificationDropdown();
-        if (el.exportModal && el.exportModal.classList.contains('open')) closeExportModal();
-        if (el.confirmModal && el.confirmModal.classList.contains('open')) closeConfirmModal();
-        if (el.storeManagementModal.classList.contains('open')) closeStoreManagementModal();
-        if (el.lightboxModal.classList.contains('open')) closeLightbox();
-        if (el.completionModal.classList.contains('open')) closeCompletionModal();
-        if (el.taskModal.classList.contains('open')) closeTaskModal();
-        if (el.commentsDrawer.classList.contains('open')) closeCommentsDrawer();
       }
     });
   }

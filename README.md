@@ -21,8 +21,10 @@ A simple, user-friendly, responsive asset and task operations management system 
 - **Activity Log & Remarks**: Slide-in comment history drawer with role badges and photo evidence viewer.
 
 ## Running Locally
-Open `index.html` directly in any web browser, or run with PowerShell:
-```powershell
-powershell -ExecutionPolicy Bypass -File server.ps1
-```
-Then navigate to `http://localhost:8080/`.
+- **Option 1 (1-Click)**: Double-click [go_live.bat](file:///f:/One%20drive%20personal/OneDrive/Desktop/newgitasset/go_live.bat).
+- **Option 2 (PowerShell)**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File server.ps1
+  ```
+- **Option 3 (Direct Browser)**: Double-click [index.html](file:///f:/One%20drive%20personal/OneDrive/Desktop/newgitasset/index.html).
+
