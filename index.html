@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3.2">
+  <link rel="stylesheet" href="style.css?v=3.6">
 </head>
 <body>
   
@@ -200,14 +200,6 @@
             </span>
             <span class="sidebar-badge badge-upcoming" id="side-count-upcoming">0</span>
           </button>
-
-          <button type="button" class="sidebar-link" data-sidebar-filter="completed">
-            <span class="sidebar-link-left">
-              <span class="status-dot dot-completed"></span>
-              <span>Completed</span>
-            </span>
-            <span class="sidebar-badge badge-completed" id="side-count-completed">0</span>
-          </button>
         </div>
 
         <!-- Management Actions -->
@@ -230,6 +222,19 @@
               </svg>
               <span>Store Credentials</span>
             </span>
+          </button>
+
+          <button type="button" id="btn-recycle-bin" class="sidebar-link hidden" title="Recycle Bin for Deleted Tasks (Admin Only)">
+            <span class="sidebar-link-left">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+              <span>Recycle Bin</span>
+            </span>
+            <span class="sidebar-badge badge-trash hidden" id="side-count-trash">0</span>
           </button>
         </div>
       </nav>
@@ -361,17 +366,6 @@
             </div>
             <div class="kpi-bar kpi-bar-upcoming"></div>
           </button>
-
-          <button class="kpi-card kpi-completed" data-filter-status="completed">
-            <div class="kpi-meta">
-              <div class="kpi-title-row">
-                <span class="status-dot dot-completed"></span>
-                <span class="kpi-label">Completed</span>
-              </div>
-              <span class="kpi-count" id="count-completed">0</span>
-            </div>
-            <div class="kpi-bar kpi-bar-completed"></div>
-          </button>
         </div>
       </section>
 
@@ -431,17 +425,21 @@
             </button>
           </div>
 
-          <!-- View Switcher (Grid vs Table vs Calendar) -->
-          <div class="view-toggle">
-            <button id="view-toggle-grid" class="btn-toggle active" title="Card View" aria-label="Card View">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7"></rect>
-                <rect x="14" y="3" width="7" height="7"></rect>
-                <rect x="14" y="14" width="7" height="7"></rect>
-                <rect x="3" y="14" width="7" height="7"></rect>
+          <!-- Recycle Bin Action (Admin Only) -->
+          <div class="filter-item hidden" id="filter-item-recycle-bin">
+            <button type="button" id="btn-open-recycle-bin" class="btn btn-secondary btn-sm" style="display: flex; align-items: center; gap: 6px; padding: 7px 12px; font-weight: 600;" title="Recycle Bin for deleted tasks (Admin only)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
+              <span>Recycle Bin</span>
+              <span id="recycle-bin-toolbar-count" class="badge-trash-pill hidden">0</span>
             </button>
-            <button id="view-toggle-table" class="btn-toggle" title="Table View" aria-label="Table View">
+          </div>
+
+          <!-- View Switcher (Table vs Calendar) -->
+          <div class="view-toggle">
+            <button id="view-toggle-table" class="btn-toggle active" title="Table View" aria-label="Table View">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="8" y1="6" x2="21" y2="6"></line>
                 <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -472,13 +470,11 @@
 
       <!-- Task Listing Area -->
       <section class="tasks-container">
-        <!-- Grid View Mode -->
-        <div id="task-grid" class="task-grid-layout">
-          <!-- Dynamically populated via app.js -->
-        </div>
+        <!-- Hidden Card Grid (retained for element reference compatibility) -->
+        <div id="task-grid" class="task-grid-layout hidden" aria-hidden="true" style="display: none;"></div>
 
-        <!-- Table View Mode -->
-        <div id="task-table-wrapper" class="task-table-wrapper hidden">
+        <!-- Table View Mode (Default Primary View) -->
+        <div id="task-table-wrapper" class="task-table-wrapper">
           <table class="task-table">
             <thead>
               <tr>
@@ -541,6 +537,129 @@
 
     </main>
   </div> <!-- .app-main-content -->
+
+    <!-- Modal: Recycle Bin (Admin Only) -->
+    <div id="recycle-bin-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="recycle-bin-title">
+      <div class="modal-card" style="max-width: 860px;">
+        <div class="modal-header">
+          <div>
+            <div class="drawer-pretitle" style="color: #DC2626;">Trash Recovery & Safety Vault</div>
+            <h2 id="recycle-bin-title" class="modal-heading">Recycle Bin</h2>
+            <p class="modal-subheading">Review deleted equipment tasks. Restoring a task immediately returns it to active schedules across admin and store accounts.</p>
+          </div>
+          <button type="button" class="btn-close" id="btn-recycle-bin-close" aria-label="Close dialog">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="recycle-bin-toolbar">
+            <div class="recycle-bin-stats">
+              <span id="recycle-bin-count-badge" class="badge-trash-count">0 deleted tasks</span>
+            </div>
+            <div class="recycle-bin-actions-top">
+              <button type="button" id="btn-restore-all-trash" class="btn btn-secondary btn-sm" title="Restore all deleted tasks">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+                <span>Restore All</span>
+              </button>
+              <button type="button" id="btn-empty-trash" class="btn btn-danger-ghost btn-sm" title="Permanently delete all items">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                <span>Empty Recycle Bin</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Deleted Tasks Table / Container -->
+          <div class="recycle-bin-table-wrapper">
+            <table class="task-table">
+              <thead>
+                <tr>
+                  <th>Asset Name</th>
+                  <th>Store Branch</th>
+                  <th>Maintenance Cycle</th>
+                  <th>Deleted At</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="recycle-bin-tbody">
+                <!-- Dynamically populated via app.js -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-recycle-bin-done">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Edit Remark & Replace Evidence Photo (Admin Only) -->
+    <div id="edit-comment-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="edit-comment-title">
+      <div class="modal-card" style="max-width: 560px;">
+        <div class="modal-header">
+          <div>
+            <div class="drawer-pretitle" style="color: #2563EB;">Admin Remark Control</div>
+            <h2 id="edit-comment-title" class="modal-heading">Edit Remark &amp; Replace Image</h2>
+            <p class="modal-subheading">Update remark notes and replace evidence photo. Changes immediately sync across both admin and store accounts.</p>
+          </div>
+          <button type="button" class="btn-close" id="btn-edit-comment-close" aria-label="Close dialog">&times;</button>
+        </div>
+
+        <form id="edit-comment-form" class="modal-body">
+          <input type="hidden" id="edit-comment-task-id">
+          <input type="hidden" id="edit-comment-id">
+
+          <!-- Author / Origin Info Banner -->
+          <div class="edit-comment-author-banner">
+            <span id="edit-comment-author-label" style="font-weight: 600; font-size: 13px; color: var(--text-main);">Store Staff Remark</span>
+            <span id="edit-comment-time-label" style="font-size: 11.5px; color: var(--text-muted);">Posted on: Aug 24, 2026</span>
+          </div>
+
+          <!-- Remark Textarea -->
+          <div class="form-group" style="margin-top: 14px;">
+            <label for="edit-comment-text-input" class="field-label">Remark Notes / Comment <span class="required-star">*</span></label>
+            <textarea id="edit-comment-text-input" class="input-textarea" rows="4" placeholder="Enter updated remark notes..." required></textarea>
+          </div>
+
+          <!-- Image Attachment / Replacement Zone -->
+          <div class="form-group" style="margin-top: 14px;">
+            <label class="field-label">Evidence / Proof Photo</label>
+            
+            <div id="edit-comment-image-preview-wrapper" class="hidden" style="margin-bottom: 10px;">
+              <div style="position: relative; display: inline-block;">
+                <img id="edit-comment-image-preview" src="" alt="Proof Preview" style="max-width: 100%; max-height: 220px; border-radius: 6px; border: 1px solid var(--border-color); object-fit: cover; display: block;">
+                <button type="button" id="btn-edit-comment-remove-image" class="btn-remove-image" title="Remove Photo" style="position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.65); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer;">
+                  ✕ Remove
+                </button>
+              </div>
+            </div>
+
+            <div class="image-upload-zone" id="edit-comment-upload-zone" style="padding: 16px 12px; text-align: center; border: 2px dashed var(--border-color); border-radius: 6px; cursor: pointer;">
+              <input type="file" id="edit-comment-file-input" accept="image/png,image/jpeg,image/webp" style="display: none;">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span style="font-size: 12.5px; font-weight: 600; color: var(--text-main);">Click or drag to replace / upload new photo</span>
+                <span style="font-size: 11px; color: var(--text-muted);">PNG, JPG, WebP (auto-optimized)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px;">
+            <button type="button" class="btn btn-secondary" id="btn-edit-comment-cancel">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="btn-edit-comment-save">Save &amp; Sync to Store</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- Modal: Store Credentials & Account Management (Admin Only) -->
     <div id="store-management-modal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-labelledby="store-mgmt-title">
@@ -1134,6 +1253,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-  <script src="app.js?v=2.7"></script>
+  <script src="app.js?v=3.2"></script>
 </body>
 </html>

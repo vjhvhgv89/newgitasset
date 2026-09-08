@@ -73,7 +73,7 @@ try {
         $response.Close()
     }
 } finally {
-    if ($listener -ne $null -and $listener.IsListening) {
+    if ($null -ne $listener -and $listener.IsListening) {
         $listener.Stop()
         $listener.Close()
     }

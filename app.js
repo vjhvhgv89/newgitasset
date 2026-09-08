@@ -115,7 +115,7 @@
     filterCategory: 'all',
     searchQuery: '',
     sortBy: 'urgency',
-    viewMode: 'grid',
+    viewMode: 'table',
     calendarYear: 2026,
     calendarMonth: 7,
     activeDrawerTaskId: null,
@@ -123,7 +123,12 @@
 
     // Completion Modal State
     completingTaskId: null,
-    completionAttachedImageData: null
+    completionAttachedImageData: null,
+
+    // Admin Edit Comment State
+    editingCommentTaskId: null,
+    editingCommentId: null,
+    editCommentImageData: null
   };
 
   // Helper: Format Date
@@ -175,45 +180,26 @@
     }
   }
 
-  // Calculate task status based on scheduled due date, next recurring cycle, and completed state
+  // Calculate task status based on scheduled due date and next recurring cycle
   function calculateTaskStatus(task) {
     if (!task) return 'Upcoming';
     const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-    if (isComplete) {
-      return 'Completed';    // Green
+    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+    if (isComplete && nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection') {
+      return calculateDateStatus(nextCycleDate);
     }
     return calculateDateStatus(task.dueDate);
   }
 
-  // Get contextual display status for a task based on active filter / lifecycle
+  // Get contextual display status for a task
   function getTaskDisplayStatus(task) {
     if (!task) return 'Upcoming';
     const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
     const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
     const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
-    const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
-
-    // If specific filter is active, align chip directly to filtered context
-    if (state.filterStatus === 'completed' && isComplete) {
-      return 'Completed';
+    if (isComplete && hasNextCycle) {
+      return calculateDateStatus(nextCycleDate);
     }
-    if (state.filterStatus === 'overdue' && isComplete && nextCycleStatus === 'Overdue') {
-      return 'Overdue';
-    }
-    if (state.filterStatus === 'due-today' && isComplete && nextCycleStatus === 'Due Today') {
-      return 'Due Today';
-    }
-    if (state.filterStatus === 'due-soon' && isComplete && nextCycleStatus === 'Due Soon') {
-      return 'Due Soon';
-    }
-    if (state.filterStatus === 'upcoming' && isComplete && nextCycleStatus === 'Upcoming') {
-      return 'Upcoming';
-    }
-
-    if (isComplete) {
-      return 'Completed';
-    }
-
     return calculateDateStatus(task.dueDate);
   }
 
@@ -233,20 +219,32 @@
       case 'Bi-Weekly':
         base.setDate(base.getDate() + 14);
         break;
-      case 'Monthly':
+      case 'Monthly': {
+        const expectedMonth = (base.getMonth() + 1) % 12;
         base.setMonth(base.getMonth() + 1);
+        if (base.getMonth() !== expectedMonth) base.setDate(0);
         break;
+      }
       case 'Quarterly':
-      case 'Every 3 Months':
+      case 'Every 3 Months': {
+        const expectedMonth = (base.getMonth() + 3) % 12;
         base.setMonth(base.getMonth() + 3);
+        if (base.getMonth() !== expectedMonth) base.setDate(0);
         break;
+      }
       case 'Semi-Annual':
-      case 'Every 6 Months':
+      case 'Every 6 Months': {
+        const expectedMonth = (base.getMonth() + 6) % 12;
         base.setMonth(base.getMonth() + 6);
+        if (base.getMonth() !== expectedMonth) base.setDate(0);
         break;
-      case 'Every 9 Months':
+      }
+      case 'Every 9 Months': {
+        const expectedMonth = (base.getMonth() + 9) % 12;
         base.setMonth(base.getMonth() + 9);
+        if (base.getMonth() !== expectedMonth) base.setDate(0);
         break;
+      }
       case 'Annual':
       case 'Every 12 Months':
         base.setFullYear(base.getFullYear() + 1);
@@ -417,6 +415,11 @@
       } else if (!snapshot.empty) {
         state.tasks = cloudTasks;
         state.tasks.forEach(t => {
+          if (t.cycle && t.cycle !== 'One-Time Inspection' && t.dueDate) {
+            if (!t.nextCycleDueDate || t.nextCycleDueDate <= t.dueDate) {
+              t.nextCycleDueDate = calculateNextCycleDate(t.dueDate, t.cycle);
+            }
+          }
           if (t.proofImage && t.comments && t.comments.length) {
             const verifComment = [...t.comments].reverse().find(c => c.isVerification);
             if (verifComment && !verifComment.proofImage) {
@@ -569,6 +572,12 @@
         t.status = calculateTaskStatus(t);
       }
 
+      if (t.cycle && t.cycle !== 'One-Time Inspection' && t.dueDate) {
+        if (!t.nextCycleDueDate || t.nextCycleDueDate <= t.dueDate) {
+          t.nextCycleDueDate = calculateNextCycleDate(t.dueDate, t.cycle);
+        }
+      }
+
       if (t.proofImage && t.comments && t.comments.length) {
         const verifComment = [...t.comments].reverse().find(c => c.isVerification);
         if (verifComment && !verifComment.proofImage) {
@@ -677,6 +686,36 @@
     newStoreCode: document.getElementById('new-store-code'),
     newStoreManager: document.getElementById('new-store-manager'),
     newStorePin: document.getElementById('new-store-pin'),
+
+    // Recycle Bin (Admin Only)
+    btnRecycleBin: document.getElementById('btn-recycle-bin'),
+    sideCountTrash: document.getElementById('side-count-trash'),
+    btnOpenRecycleBin: document.getElementById('btn-open-recycle-bin'),
+    filterItemRecycleBin: document.getElementById('filter-item-recycle-bin'),
+    recycleBinToolbarCount: document.getElementById('recycle-bin-toolbar-count'),
+    recycleBinModal: document.getElementById('recycle-bin-modal'),
+    btnRecycleBinClose: document.getElementById('btn-recycle-bin-close'),
+    btnRecycleBinDone: document.getElementById('btn-recycle-bin-done'),
+    recycleBinTbody: document.getElementById('recycle-bin-tbody'),
+    recycleBinCountBadge: document.getElementById('recycle-bin-count-badge'),
+    btnRestoreAllTrash: document.getElementById('btn-restore-all-trash'),
+    btnEmptyTrash: document.getElementById('btn-empty-trash'),
+
+    // Admin Edit Remark / Replace Image Modal
+    editCommentModal: document.getElementById('edit-comment-modal'),
+    btnEditCommentClose: document.getElementById('btn-edit-comment-close'),
+    btnEditCommentCancel: document.getElementById('btn-edit-comment-cancel'),
+    editCommentForm: document.getElementById('edit-comment-form'),
+    editCommentTaskId: document.getElementById('edit-comment-task-id'),
+    editCommentId: document.getElementById('edit-comment-id'),
+    editCommentAuthorLabel: document.getElementById('edit-comment-author-label'),
+    editCommentTimeLabel: document.getElementById('edit-comment-time-label'),
+    editCommentTextInput: document.getElementById('edit-comment-text-input'),
+    editCommentImagePreviewWrapper: document.getElementById('edit-comment-image-preview-wrapper'),
+    editCommentImagePreview: document.getElementById('edit-comment-image-preview'),
+    btnEditCommentRemoveImage: document.getElementById('btn-edit-comment-remove-image'),
+    editCommentUploadZone: document.getElementById('edit-comment-upload-zone'),
+    editCommentFileInput: document.getElementById('edit-comment-file-input'),
 
     // Completion Verification Modal
     completionModal: document.getElementById('completion-modal'),
@@ -1055,9 +1094,9 @@
   // =========================================================================
 
   function getExportDataset(scope = 'filtered') {
-    const baseTasks = isAdmin()
+    const baseTasks = (isAdmin()
       ? state.tasks
-      : state.tasks.filter(t => t.store === state.auth.store);
+      : state.tasks.filter(t => t.store === state.auth.store)).filter(t => !t.isDeleted);
 
     if (scope === 'filtered') {
       return getFilteredTasks();
@@ -1486,6 +1525,7 @@
   // Filter tasks based on role, search, status, and dropdowns
   function getFilteredTasks() {
     return state.tasks.filter(task => {
+      if (task.isDeleted) return false;
       if (!isAdmin()) {
         if (task.store !== state.auth.store) {
           return false;
@@ -1503,25 +1543,11 @@
       const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
 
       if (state.filterStatus !== 'all') {
-        if (state.filterStatus === 'completed') {
-          if (!isComplete) return false;
-        } else if (state.filterStatus === 'overdue') {
-          const matchPrimary = !isComplete && primaryStatus === 'Overdue';
-          const matchNext = isComplete && nextCycleStatus === 'Overdue';
-          if (!matchPrimary && !matchNext) return false;
-        } else if (state.filterStatus === 'due-today') {
-          const matchPrimary = !isComplete && primaryStatus === 'Due Today';
-          const matchNext = isComplete && nextCycleStatus === 'Due Today';
-          if (!matchPrimary && !matchNext) return false;
-        } else if (state.filterStatus === 'due-soon') {
-          const matchPrimary = !isComplete && primaryStatus === 'Due Soon';
-          const matchNext = isComplete && nextCycleStatus === 'Due Soon';
-          if (!matchPrimary && !matchNext) return false;
-        } else if (state.filterStatus === 'upcoming') {
-          const matchPrimary = !isComplete && primaryStatus === 'Upcoming';
-          const matchNext = isComplete && nextCycleStatus === 'Upcoming';
-          if (!matchPrimary && !matchNext) return false;
-        }
+        const effectiveStatus = (isComplete && hasNextCycle) ? nextCycleStatus : primaryStatus;
+        if (state.filterStatus === 'overdue' && effectiveStatus !== 'Overdue') return false;
+        if (state.filterStatus === 'due-today' && effectiveStatus !== 'Due Today') return false;
+        if (state.filterStatus === 'due-soon' && effectiveStatus !== 'Due Soon') return false;
+        if (state.filterStatus === 'upcoming' && effectiveStatus !== 'Upcoming') return false;
       }
 
       if (state.filterCategory !== 'all' && task.category !== state.filterCategory) {
@@ -1566,6 +1592,7 @@
   // Update Header & KPI metrics & Sidebar
   function updateKPIsAndHeader() {
     const scopeTasks = state.tasks.filter(t => {
+      if (t.isDeleted) return false;
       if (!isAdmin() && t.store !== state.auth.store) return false;
       if (isAdmin() && state.filterStore !== 'all' && t.store !== state.filterStore) return false;
       return true;
@@ -1576,7 +1603,6 @@
     let dueToday = 0;
     let dueSoon = 0;
     let upcoming = 0;
-    let completed = 0;
 
     scopeTasks.forEach(t => {
       const isComplete = (t.status === 'Completed' || Boolean(t.completedAt));
@@ -1585,27 +1611,19 @@
       const hasNextCycle = Boolean(nextCycleDate && t.cycle && t.cycle !== 'One-Time Inspection');
       const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
 
-      if (isComplete) {
-        completed++;
-        if (nextCycleStatus === 'Overdue') overdue++;
-        else if (nextCycleStatus === 'Due Today') dueToday++;
-        else if (nextCycleStatus === 'Due Soon') dueSoon++;
-        else if (nextCycleStatus === 'Upcoming') upcoming++;
-      } else {
-        if (primaryStatus === 'Overdue') overdue++;
-        else if (primaryStatus === 'Due Today') dueToday++;
-        else if (primaryStatus === 'Due Soon') dueSoon++;
-        else if (primaryStatus === 'Upcoming') upcoming++;
-      }
+      const effectiveStatus = (isComplete && hasNextCycle) ? nextCycleStatus : primaryStatus;
+      if (effectiveStatus === 'Overdue') overdue++;
+      else if (effectiveStatus === 'Due Today') dueToday++;
+      else if (effectiveStatus === 'Due Soon') dueSoon++;
+      else if (effectiveStatus === 'Upcoming') upcoming++;
     });
 
     // KPI Header counters
-    el.countAll.textContent = total;
-    el.countOverdue.textContent = overdue;
-    el.countDueToday.textContent = dueToday;
-    el.countDueSoon.textContent = dueSoon;
-    el.countUpcoming.textContent = upcoming;
-    el.countCompleted.textContent = completed;
+    if (el.countAll) el.countAll.textContent = total;
+    if (el.countOverdue) el.countOverdue.textContent = overdue;
+    if (el.countDueToday) el.countDueToday.textContent = dueToday;
+    if (el.countDueSoon) el.countDueSoon.textContent = dueSoon;
+    if (el.countUpcoming) el.countUpcoming.textContent = upcoming;
 
     // Sidebar Badge Counters
     if (el.sideCountAll) el.sideCountAll.textContent = total;
@@ -1613,7 +1631,6 @@
     if (el.sideCountDueToday) el.sideCountDueToday.textContent = dueToday;
     if (el.sideCountDueSoon) el.sideCountDueSoon.textContent = dueSoon;
     if (el.sideCountUpcoming) el.sideCountUpcoming.textContent = upcoming;
-    if (el.sideCountCompleted) el.sideCountCompleted.textContent = completed;
 
     el.kpiCards.forEach(card => {
       if (card.dataset.filterStatus === state.filterStatus) {
@@ -1642,8 +1659,23 @@
       el.adminStoreSwitcherWrapper.classList.remove('hidden');
       el.adminStoreQuickSwitch.value = state.filterStore;
       el.btnManageStores.classList.remove('hidden');
+      if (el.btnRecycleBin) el.btnRecycleBin.classList.remove('hidden');
+      if (el.filterItemRecycleBin) el.filterItemRecycleBin.classList.remove('hidden');
       el.btnCreateTask.classList.remove('hidden');
       el.filterStoreWrapper.classList.remove('hidden');
+
+      const deletedCount = state.tasks.filter(t => t.isDeleted).length;
+      if (el.sideCountTrash) {
+        el.sideCountTrash.textContent = deletedCount;
+        if (deletedCount > 0) el.sideCountTrash.classList.remove('hidden');
+        else el.sideCountTrash.classList.add('hidden');
+      }
+      if (el.recycleBinToolbarCount) {
+        el.recycleBinToolbarCount.textContent = deletedCount;
+        if (deletedCount > 0) el.recycleBinToolbarCount.classList.remove('hidden');
+        else el.recycleBinToolbarCount.classList.add('hidden');
+      }
+
       el.viewTitle.textContent = state.filterStore === 'all'
         ? 'All Stores Task Overview'
         : `${state.filterStore} — Tasks`;
@@ -1666,6 +1698,8 @@
       if (el.mobileRoleDot) el.mobileRoleDot.style.backgroundColor = '#10B981';
       el.adminStoreSwitcherWrapper.classList.add('hidden');
       el.btnManageStores.classList.add('hidden');
+      if (el.btnRecycleBin) el.btnRecycleBin.classList.add('hidden');
+      if (el.filterItemRecycleBin) el.filterItemRecycleBin.classList.add('hidden');
       el.btnCreateTask.classList.add('hidden');
       el.filterStoreWrapper.classList.add('hidden');
       el.viewTitle.textContent = `${storeName} Workspace`;
@@ -1882,10 +1916,9 @@
 
   // Render Task Table View
   function renderTable(tasks) {
-    const isCompletedFilter = state.filterStatus === 'completed';
     const thDate = document.getElementById('th-table-date');
     if (thDate) {
-      thDate.textContent = isCompletedFilter ? 'Date Completed' : 'Due Date';
+      thDate.textContent = 'Due Date';
     }
     const thNextCycle = document.getElementById('th-table-next-cycle');
     if (thNextCycle) {
@@ -1904,7 +1937,19 @@
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
 
-      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+      const targetDueDate = (isComplete && (task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle)))
+        ? (task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle))
+        : (task.dueDate || TODAY_STR);
+
+      // Next Cycle Date strictly follows the displayed due date:
+      let nextCycleDate = null;
+      if (task.cycle && task.cycle !== 'One-Time Inspection') {
+        if (task.nextCycleDueDate && task.nextCycleDueDate > targetDueDate) {
+          nextCycleDate = task.nextCycleDueDate;
+        } else {
+          nextCycleDate = calculateNextCycleDate(targetDueDate, task.cycle);
+        }
+      }
       const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
       let nextMeta = null;
       let nextCycleCell = '—';
@@ -1915,28 +1960,16 @@
           <div><strong>${formatDateDisplay(nextCycleDate)}</strong></div>
           <div style="display:flex; align-items:center; gap:4px; margin-top:2px;">
             <span class="status-chip ${nextMeta.className}" style="font-size: 10px; padding: 1px 6px;">${nextMeta.label}</span>
-            ${isComplete && !isAdmin() ? `
-              <button type="button" class="btn-start-early-pill" onclick="window.assetApp.startNextCycleEarly('${task.id}')" style="font-size: 9.5px; padding: 1px 5px;" title="Start upcoming cycle early">⚡ Start</button>
-            ` : ''}
           </div>
         `;
       } else {
         nextCycleCell = `<span style="color: var(--text-subtle);">One-Time</span>`;
       }
 
-      let dateCellHtml = '';
-      if (isCompletedFilter) {
-        dateCellHtml = `
-          <div><span style="color:#059669; font-weight:700;">Done: ${formatDateDisplay(task.completedAt || task.dueDate)}</span></div>
-          <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
-        `;
-      } else {
-        const targetDueDate = (isComplete && hasNextCycle) ? nextCycleDate : task.dueDate;
-        dateCellHtml = `
-          <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(targetDueDate)}</span></div>
-          <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
-        `;
-      }
+      const dateCellHtml = `
+        <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(targetDueDate)}</span></div>
+        <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
+      `;
 
       let conditionCellHtml = '';
       if (isAdmin()) {
@@ -1982,11 +2015,8 @@
           <td>
             <div class="table-actions-cell">
               ${isAdmin() ? `
-                ${isComplete ? `
-                  <button class="btn btn-ghost btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Reopen task (Admin)">Reopen</button>
-                ` : ''}
                 <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task details (Admin)">Edit</button>
-                <button class="btn btn-danger btn-sm btn-icon-only" onclick="window.assetApp.deleteTask('${task.id}')" title="Delete task permanently (Admin)">
+                <button class="btn btn-danger btn-sm btn-icon-only" onclick="window.assetApp.deleteTask('${task.id}')" title="Move task to Recycle Bin (Admin)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
@@ -1996,19 +2026,9 @@
                   </svg>
                 </button>
               ` : `
-                ${isComplete ? `
-                  ${hasNextCycle ? `
-                    <button class="btn btn-primary btn-sm btn-start-cycle" onclick="window.assetApp.startNextCycleEarly('${task.id}')" title="Start next maintenance cycle early">
-                      ⚡ Start Next Cycle
-                    </button>
-                  ` : `
-                    <span style="color: #059669; font-size: 11px; font-weight: 700;">✓ Completed</span>
-                  `}
-                ` : `
-                  <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')">
-                    Done
-                  </button>
-                `}
+                <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Complete maintenance cycle with photo proof">
+                  Done
+                </button>
               `}
             </div>
           </td>
@@ -2035,14 +2055,104 @@
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
 
-    // Map tasks by date YYYY-MM-DD
+    // Map tasks by date YYYY-MM-DD (collecting both due dates and next cycle dates)
     const taskMap = {};
+    const addCalendarEvent = (dateStr, eventObj) => {
+      if (!dateStr) return;
+      const cleanDate = String(dateStr).split('T')[0];
+      if (!taskMap[cleanDate]) taskMap[cleanDate] = [];
+      taskMap[cleanDate].push(eventObj);
+    };
+
     tasks.forEach(t => {
-      const dateStr = (t.status === 'Completed' && t.completedAt) ? t.completedAt : t.dueDate;
-      if (dateStr) {
-        const cleanDate = String(dateStr).split('T')[0];
-        if (!taskMap[cleanDate]) taskMap[cleanDate] = [];
-        taskMap[cleanDate].push(t);
+      const isComplete = (t.status === 'Completed' || Boolean(t.completedAt));
+
+      // 1. Primary Due Date Event
+      const dueDate = t.dueDate ? String(t.dueDate).split('T')[0] : null;
+      if (dueDate) {
+        if (!isComplete) {
+          const status = calculateDateStatus(dueDate);
+          let pillClass = 'pill-upcoming';
+          if (status === 'Overdue') pillClass = 'pill-overdue';
+          else if (status === 'Due Today') pillClass = 'pill-due-today';
+          else if (status === 'Due Soon') pillClass = 'pill-due-soon';
+
+          addCalendarEvent(dueDate, {
+            task: t,
+            type: 'due',
+            dateStr: dueDate,
+            pillClass: pillClass,
+            badgeText: 'Due',
+            label: t.assetName,
+            title: `${t.assetName} (${t.store}) • Due: ${formatDateDisplay(dueDate)} [${status}]`
+          });
+        }
+      }
+
+      // 2. Completed Date Event (if completed)
+      if (isComplete && t.completedAt) {
+        const compDate = String(t.completedAt).split('T')[0];
+        addCalendarEvent(compDate, {
+          task: t,
+          type: 'completed',
+          dateStr: compDate,
+          pillClass: 'pill-completed',
+          badgeText: '✓ Done',
+          label: t.assetName,
+          title: `${t.assetName} (${t.store}) • Completed on: ${formatDateDisplay(compDate)}`
+        });
+      }
+
+      // 3. Next Recurring Maintenance Cycle Date Event (and upcoming cycle for completed tasks)
+      if (t.cycle && t.cycle !== 'One-Time Inspection') {
+        const baseDueDate = (isComplete && t.nextCycleDueDate && t.nextCycleDueDate > (t.completedAt || TODAY_STR))
+          ? t.nextCycleDueDate
+          : (t.dueDate || TODAY_STR);
+
+        // If task was completed, also plot its upcoming active cycle due date
+        if (isComplete && baseDueDate) {
+          const cleanBaseDate = String(baseDueDate).split('T')[0];
+          const compDate = t.completedAt ? String(t.completedAt).split('T')[0] : null;
+          if (cleanBaseDate !== compDate) {
+            const upcomingStatus = calculateDateStatus(cleanBaseDate);
+            let pillClass = 'pill-upcoming';
+            if (upcomingStatus === 'Overdue') pillClass = 'pill-overdue';
+            else if (upcomingStatus === 'Due Today') pillClass = 'pill-due-today';
+            else if (upcomingStatus === 'Due Soon') pillClass = 'pill-due-soon';
+
+            addCalendarEvent(cleanBaseDate, {
+              task: t,
+              type: 'due',
+              dateStr: cleanBaseDate,
+              pillClass: pillClass,
+              badgeText: 'Due',
+              label: t.assetName,
+              title: `${t.assetName} (${t.store}) • Upcoming Maintenance Due: ${formatDateDisplay(cleanBaseDate)} [${upcomingStatus}]`
+            });
+          }
+        }
+
+        // Calculate subsequent next cycle date (e.g. Feb 1, 2027)
+        let nextCycleDate = null;
+        if (t.nextCycleDueDate && t.nextCycleDueDate > baseDueDate) {
+          nextCycleDate = t.nextCycleDueDate;
+        } else {
+          nextCycleDate = calculateNextCycleDate(baseDueDate, t.cycle);
+        }
+
+        if (nextCycleDate) {
+          const cleanNextDate = String(nextCycleDate).split('T')[0];
+          const nextStatus = calculateDateStatus(cleanNextDate);
+          addCalendarEvent(cleanNextDate, {
+            task: t,
+            type: 'next-cycle',
+            dateStr: cleanNextDate,
+            pillClass: 'pill-next-cycle',
+            badgeText: '🔄 Next',
+            label: t.assetName,
+            title: `${t.assetName} (${t.store}) • Next ${t.cycle} Maintenance: ${formatDateDisplay(cleanNextDate)} [${nextStatus}]`
+          });
+        }
       }
     });
 
@@ -2056,9 +2166,9 @@
       const m = String(prevDate.getMonth() + 1).padStart(2, '0');
       const d = String(prevDay).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
-      const dayTasks = taskMap[dateStr] || [];
+      const dayEvents = taskMap[dateStr] || [];
 
-      gridHtml += renderCalendarDayCell(prevDay, dateStr, dayTasks, true, false);
+      gridHtml += renderCalendarDayCell(prevDay, dateStr, dayEvents, true, false);
     }
 
     // Current month days
@@ -2068,9 +2178,9 @@
       const d = String(day).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
       const isToday = (dateStr === TODAY_STR);
-      const dayTasks = taskMap[dateStr] || [];
+      const dayEvents = taskMap[dateStr] || [];
 
-      gridHtml += renderCalendarDayCell(day, dateStr, dayTasks, false, isToday);
+      gridHtml += renderCalendarDayCell(day, dateStr, dayEvents, false, isToday);
     }
 
     // Next month padding days to complete 35 or 42 grid cells
@@ -2084,30 +2194,24 @@
       const m = String(nextDate.getMonth() + 1).padStart(2, '0');
       const d = String(day).padStart(2, '0');
       const dateStr = `${y}-${m}-${d}`;
-      const dayTasks = taskMap[dateStr] || [];
+      const dayEvents = taskMap[dateStr] || [];
 
-      gridHtml += renderCalendarDayCell(day, dateStr, dayTasks, true, false);
+      gridHtml += renderCalendarDayCell(day, dateStr, dayEvents, true, false);
     }
 
     el.calendarDaysGrid.innerHTML = gridHtml;
     bindCalendarCellEvents();
   }
 
-  function renderCalendarDayCell(dayNum, dateStr, dayTasks, isOtherMonth, isToday) {
+  function renderCalendarDayCell(dayNum, dateStr, dayEvents, isOtherMonth, isToday) {
     const cellClass = `calendar-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'is-today' : ''}`;
 
-    const taskPillsHtml = dayTasks.map(t => {
-      const status = (t.status === 'Completed') ? 'Completed' : calculateTaskStatus(t);
-      let pillClass = 'pill-upcoming';
-      if (status === 'Overdue') pillClass = 'pill-overdue';
-      else if (status === 'Due Today') pillClass = 'pill-due-today';
-      else if (status === 'Due Soon') pillClass = 'pill-due-soon';
-      else if (status === 'Completed') pillClass = 'pill-completed';
-
+    const taskPillsHtml = dayEvents.map(evt => {
+      const t = evt.task;
       return `
-        <div class="calendar-event-pill ${pillClass}" draggable="true" data-task-id="${t.id}" onclick="event.stopPropagation(); window.assetApp.openComments('${t.id}')" title="${escapeHTML(t.assetName)} (${escapeHTML(t.store)}) • Status: ${status}">
-          <span style="font-weight:700;">•</span>
-          <span>${escapeHTML(t.assetName)}</span>
+        <div class="calendar-event-pill ${evt.pillClass}" draggable="true" data-task-id="${t.id}" data-event-type="${evt.type}" onclick="event.stopPropagation(); window.assetApp.openComments('${t.id}')" title="${escapeHTML(evt.title)}">
+          <span class="pill-badge">${escapeHTML(evt.badgeText)}</span>
+          <span class="pill-text">${escapeHTML(evt.label)}</span>
         </div>
       `;
     }).join('');
@@ -2148,15 +2252,42 @@
 
         const task = state.tasks.find(t => t.id === draggedTaskId);
         if (task) {
-          task.dueDate = targetDate;
-          if (task.status !== 'Completed') {
-            task.status = calculateTaskStatus(task);
+          if (draggedEventType === 'next-cycle') {
+            task.nextCycleDueDate = targetDate;
+            saveState();
+            syncTaskToCloud(task);
+            render();
+            showToast(`Updated next maintenance cycle for "${task.assetName}" to ${formatDateDisplay(targetDate)}`);
+          } else {
+            task.dueDate = targetDate;
+            if (task.status !== 'Completed') {
+              task.status = calculateTaskStatus(task);
+            }
+            if (task.cycle && task.cycle !== 'One-Time Inspection') {
+              task.nextCycleDueDate = calculateNextCycleDate(targetDate, task.cycle);
+            }
+            saveState();
+            syncTaskToCloud(task);
+            render();
+            showToast(`Rescheduled "${task.assetName}" to ${formatDateDisplay(targetDate)}`);
           }
-          saveState();
-          syncTaskToCloud(task);
-          render();
-          showToast(`Rescheduled "${task.assetName}" to ${formatDateDisplay(targetDate)}`);
         }
+      });
+    });
+
+    const pills = el.calendarDaysGrid.querySelectorAll('.calendar-event-pill');
+    pills.forEach(pill => {
+      pill.addEventListener('dragstart', (e) => {
+        draggedTaskId = pill.getAttribute('data-task-id');
+        draggedEventType = pill.getAttribute('data-event-type') || 'due';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', draggedTaskId);
+        setTimeout(() => pill.classList.add('is-dragging'), 0);
+      });
+      pill.addEventListener('dragend', () => {
+        pill.classList.remove('is-dragging');
+        draggedTaskId = null;
+        draggedEventType = null;
       });
     });
   }
@@ -2211,27 +2342,23 @@
     const filteredTasks = getFilteredTasks();
 
     if (filteredTasks.length === 0 && state.viewMode !== 'calendar') {
-      el.taskGrid.classList.add('hidden');
+      if (el.taskGrid) el.taskGrid.classList.add('hidden');
       el.taskTableWrapper.classList.add('hidden');
       if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
       el.emptyState.classList.remove('hidden');
     } else {
       el.emptyState.classList.add('hidden');
-      if (state.viewMode === 'grid') {
-        el.taskGrid.classList.remove('hidden');
-        el.taskTableWrapper.classList.add('hidden');
-        if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
-        renderGrid(filteredTasks);
-      } else if (state.viewMode === 'table') {
-        el.taskGrid.classList.add('hidden');
-        el.taskTableWrapper.classList.remove('hidden');
-        if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
-        renderTable(filteredTasks);
-      } else if (state.viewMode === 'calendar') {
-        el.taskGrid.classList.add('hidden');
+      if (state.viewMode === 'calendar') {
+        if (el.taskGrid) el.taskGrid.classList.add('hidden');
         el.taskTableWrapper.classList.add('hidden');
         if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.remove('hidden');
         renderCalendar(filteredTasks);
+      } else {
+        // Primary / Default: Table View Mode
+        if (el.taskGrid) el.taskGrid.classList.add('hidden');
+        el.taskTableWrapper.classList.remove('hidden');
+        if (el.taskCalendarWrapper) el.taskCalendarWrapper.classList.add('hidden');
+        renderTable(filteredTasks);
       }
     }
 
@@ -2490,17 +2617,226 @@
     const task = state.tasks[idx];
 
     showConfirmModal({
-      title: 'Delete Asset Task?',
-      message: `Are you sure you want to permanently delete <strong>"${escapeHTML(task.assetName)}"</strong> (${escapeHTML(task.store)})?<br><br><small style="color: #DC2626;">This action cannot be undone and will remove all maintenance records and photo proofs for this asset.</small>`,
+      title: 'Move Task to Recycle Bin?',
+      message: `Are you sure you want to move <strong>"${escapeHTML(task.assetName)}"</strong> (${escapeHTML(task.store)}) to the Recycle Bin?<br><br><small style="color: var(--text-muted);">This task will be removed from active lists and store accounts. You can restore it at any time from the Recycle Bin.</small>`,
       iconType: 'danger',
-      okText: 'Delete Asset',
+      okText: 'Move to Trash',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        task.isDeleted = true;
+        task.deletedAt = new Date().toISOString();
+        task.deletedBy = getCurrentUserLabel();
+
+        if (state.activeDrawerTaskId === taskId) {
+          closeCommentsDrawer();
+        }
+
+        saveState();
+        syncTaskToCloud(task);
+        render();
+        if (el.recycleBinModal && el.recycleBinModal.classList.contains('open')) {
+          renderRecycleBinModal();
+        }
+        showToast(`Asset "${task.assetName}" moved to Recycle Bin.`);
+      }
+    });
+  }
+
+  // =========================================================================
+  // Recycle Bin & Trash Recovery Operations (Admin Only)
+  // =========================================================================
+
+  function openRecycleBinModal() {
+    if (!isAdmin()) return;
+    if (!el.recycleBinModal) return;
+    renderRecycleBinModal();
+    el.recycleBinModal.classList.add('open');
+    el.recycleBinModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeRecycleBinModal() {
+    if (!el.recycleBinModal) return;
+    el.recycleBinModal.classList.remove('open');
+    el.recycleBinModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function renderRecycleBinModal() {
+    if (!el.recycleBinTbody) return;
+    const deletedTasks = state.tasks.filter(t => t.isDeleted);
+    const count = deletedTasks.length;
+
+    if (el.recycleBinCountBadge) {
+      el.recycleBinCountBadge.textContent = `${count} deleted task${count === 1 ? '' : 's'}`;
+    }
+    if (el.btnRestoreAllTrash) {
+      el.btnRestoreAllTrash.disabled = (count === 0);
+    }
+    if (el.btnEmptyTrash) {
+      el.btnEmptyTrash.disabled = (count === 0);
+    }
+
+    if (count === 0) {
+      el.recycleBinTbody.innerHTML = `
+        <tr>
+          <td colspan="5">
+            <div class="recycle-bin-empty-state">
+              <svg class="recycle-bin-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <h4 style="margin: 0 0 6px 0; font-size: 15px; color: var(--text-main);">Recycle Bin is Empty</h4>
+              <p style="margin: 0; font-size: 13px; color: var(--text-muted);">No deleted tasks in trash. Tasks moved to the trash can be safely restored here at any time.</p>
+            </div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    el.recycleBinTbody.innerHTML = deletedTasks.map(task => {
+      const deletedDateStr = task.deletedAt ? new Date(task.deletedAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : 'Recently';
+
+      return `
+        <tr data-deleted-task-id="${escapeHTML(task.id)}">
+          <td>
+            <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(task.assetName)}</div>
+            <div style="font-size: 11.5px; color: var(--text-muted);">${escapeHTML(task.category || 'Equipment')} • SN: ${escapeHTML(task.serialNumber || 'N/A')}</div>
+          </td>
+          <td>
+            <span class="store-badge">${escapeHTML(task.store)}</span>
+          </td>
+          <td>
+            <div style="font-size: 12.5px; font-weight: 500;">${escapeHTML(task.cycle || 'Monthly')}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Due: ${formatDateDisplay(task.dueDate)}</div>
+          </td>
+          <td>
+            <div style="font-size: 12px; color: var(--text-main); font-weight: 500;">${escapeHTML(deletedDateStr)}</div>
+            <div style="font-size: 11px; color: var(--text-muted);">By: ${escapeHTML(task.deletedBy || 'Admin')}</div>
+          </td>
+          <td style="text-align: right;">
+            <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+              <button type="button" class="btn btn-sm btn-restore" onclick="window.assetApp.restoreTask('${task.id}')" title="Restore task to active schedule">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+                <span>Restore</span>
+              </button>
+              <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.permanentlyDeleteTask('${task.id}')" title="Permanently delete task forever">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+                <span>Delete Forever</span>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function restoreTask(taskId) {
+    if (!isAdmin()) return;
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    task.isDeleted = false;
+    delete task.deletedAt;
+    delete task.deletedBy;
+
+    saveState();
+    syncTaskToCloud(task);
+
+    // Notify the store account in realtime
+    sendAppNotification({
+      target: task.store,
+      type: 'task_restored',
+      title: 'Task Restored from Recycle Bin',
+      message: `Admin restored maintenance task for "${task.assetName}" back to active schedule.`,
+      taskId: task.id,
+      sender: 'Admin (Headquarters)'
+    });
+
+    render();
+    renderRecycleBinModal();
+    showToast(`Restored "${task.assetName}" back to ${task.store} active tasks.`);
+  }
+
+  function restoreAllDeletedTasks() {
+    if (!isAdmin()) return;
+    const deletedTasks = state.tasks.filter(t => t.isDeleted);
+    if (deletedTasks.length === 0) return;
+
+    deletedTasks.forEach(task => {
+      task.isDeleted = false;
+      delete task.deletedAt;
+      delete task.deletedBy;
+      syncTaskToCloud(task);
+      sendAppNotification({
+        target: task.store,
+        type: 'task_restored',
+        title: 'Task Restored from Recycle Bin',
+        message: `Admin restored maintenance task for "${task.assetName}" back to active schedule.`,
+        taskId: task.id,
+        sender: 'Admin (Headquarters)'
+      });
+    });
+
+    saveState();
+    render();
+    renderRecycleBinModal();
+    showToast(`Restored all ${deletedTasks.length} task(s) to active schedules.`);
+  }
+
+  function permanentlyDeleteTask(taskId) {
+    if (!isAdmin()) return;
+    const idx = state.tasks.findIndex(t => t.id === taskId);
+    if (idx === -1) return;
+    const task = state.tasks[idx];
+
+    showConfirmModal({
+      title: 'Permanently Delete Task?',
+      message: `Are you sure you want to permanently delete <strong>"${escapeHTML(task.assetName)}"</strong> (${escapeHTML(task.store)})?<br><br><small style="color: #DC2626;">This action cannot be undone and will permanently erase this maintenance record from both cloud and local databases.</small>`,
+      iconType: 'danger',
+      okText: 'Delete Forever',
       okClass: 'btn-danger',
       onConfirm: () => {
         state.tasks.splice(idx, 1);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+        saveState();
         removeTaskFromCloud(taskId);
         render();
-        showToast(`Asset "${task.assetName}" deleted.`);
+        renderRecycleBinModal();
+        showToast(`Asset "${task.assetName}" permanently deleted.`);
+      }
+    });
+  }
+
+  function emptyRecycleBin() {
+    if (!isAdmin()) return;
+    const count = state.tasks.filter(t => t.isDeleted).length;
+    if (count === 0) return;
+
+    showConfirmModal({
+      title: 'Empty Recycle Bin?',
+      message: `Are you sure you want to permanently delete all <strong>${count}</strong> item(s) in the Recycle Bin?<br><br><small style="color: #DC2626;">This cannot be undone. All deleted tasks will be purged from the database forever.</small>`,
+      iconType: 'danger',
+      okText: 'Empty Bin',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        const toDelete = state.tasks.filter(t => t.isDeleted);
+        state.tasks = state.tasks.filter(t => !t.isDeleted);
+        toDelete.forEach(t => removeTaskFromCloud(t.id));
+        saveState();
+        render();
+        renderRecycleBinModal();
+        showToast(`Recycle Bin emptied (${count} tasks permanently erased).`);
       }
     });
   }
@@ -2608,7 +2944,9 @@
     const task = state.tasks.find(t => t.id === taskId);
     if (!task) return;
 
-    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.completedAt || task.dueDate || TODAY_STR, task.cycle);
+    const nextCycleDate = (task.nextCycleDueDate && (!task.dueDate || task.nextCycleDueDate > task.dueDate))
+      ? task.nextCycleDueDate
+      : calculateNextCycleDate(task.completedAt || task.dueDate || TODAY_STR, task.cycle);
     if (!nextCycleDate || task.cycle === 'One-Time Inspection') {
       alert('This task has no recurring maintenance cycle scheduled.');
       return;
@@ -2817,46 +3155,56 @@
       return;
     }
 
+    const scheduledDate = task.dueDate || TODAY_STR;
     const condition = el.completionConditionSelect.value;
     const nowIso = new Date().toISOString();
     const proofUrl = state.completionAttachedImageData;
 
-    // 1. Mark task completed with chosen completion date and staff performer name
-    task.status = 'Completed';
-    task.completedAt = completionDate;
-    task.completedTimestamp = nowIso;
-    task.completedBy = staffName;
-    task.condition = condition;
-    task.completionRemarks = remarks;
-    task.proofImage = proofUrl;
-
-    // 2. Compute Next Maintenance Cycle due date and its color status
+    // 1. Compute Next Maintenance Cycle due date
     let nextDate = task.nextCycleDueDate;
     if (!nextDate || nextDate <= completionDate) {
       nextDate = calculateNextCycleDate(task.dueDate || completionDate, task.cycle);
     }
     let nextStatusText = '';
     if (nextDate && task.cycle !== 'One-Time Inspection') {
-      task.nextCycleDueDate = nextDate;
       const nextCycleStatus = calculateDateStatus(nextDate);
       const nextMeta = getStatusMeta(nextCycleStatus);
       nextStatusText = `\nNext ${task.cycle} Maintenance Scheduled: ${formatDateDisplay(nextDate)} (${nextMeta.label})`;
     }
 
-    // 3. Log comment into history with permanent proof image URL & Performed By name
+    // 2. Log completion milestone into remarks section:
+    // "completed history will be found only on the remarks section indicated the task date sched and when its completed and the next cycle date"
     task.comments = task.comments || [];
     task.comments.push({
       id: 'c-' + Date.now(),
       author: `${staffName} (${task.store})`,
       role: isAdmin() ? 'admin' : 'store',
-      text: `✅ Task Completed on ${formatDateDisplay(completionDate)} by ${staffName} & Verified\nRemarks: ${remarks}${nextStatusText}`,
+      text: `✅ Maintenance Completed\nTask Scheduled Date: ${formatDateDisplay(scheduledDate)}\nCompleted on: ${formatDateDisplay(completionDate)} by ${staffName}\nNext Cycle Date: ${nextDate ? formatDateDisplay(nextDate) : 'None (One-Time)'}\nRemarks: ${remarks}`,
       remarks: remarks,
+      scheduledDueDate: scheduledDate,
+      completionDate: completionDate,
+      nextCycleDueDate: nextDate || null,
       nextScheduleText: nextStatusText ? nextStatusText.trim() : '',
       proofImage: proofUrl,
-      completionDate: completionDate,
       timestamp: nowIso,
       isVerification: true
     });
+
+    // 3. For recurring maintenance: roll schedule to the Next Cycle Date so it continues in active schedules
+    if (nextDate && task.cycle !== 'One-Time Inspection') {
+      task.dueDate = nextDate;
+      task.nextCycleDueDate = calculateNextCycleDate(nextDate, task.cycle);
+      task.status = calculateDateStatus(nextDate);
+      task.completedAt = null;
+      task.completedBy = null;
+    } else {
+      task.status = 'Upcoming';
+      task.completedAt = completionDate;
+      task.completedBy = staffName;
+    }
+    task.condition = condition;
+    task.completionRemarks = remarks;
+    task.proofImage = proofUrl;
 
     saveState();
     syncTaskToCloud(task);
@@ -2932,7 +3280,9 @@
     if (calculated) {
       el.formNextCycleDate.value = calculated;
     } else if (cycle === 'Custom Scheduled Date') {
-      if (!el.formNextCycleDate.value) el.formNextCycleDate.value = baseDate;
+      if (!el.formNextCycleDate.value || el.formNextCycleDate.value <= baseDate) {
+        el.formNextCycleDate.value = calculateNextCycleDate(baseDate, 'Monthly') || baseDate;
+      }
     } else {
       el.formNextCycleDate.value = '';
     }
@@ -2992,10 +3342,10 @@
       el.formDescription.value = task.description || '';
 
       // Specific next cycle date set by admin or auto-computed
-      if (task.nextCycleDueDate) {
+      if (task.nextCycleDueDate && (!task.dueDate || task.nextCycleDueDate > task.dueDate)) {
         el.formNextCycleDate.value = task.nextCycleDueDate;
       } else {
-        const autoNext = calculateNextCycleDate(task.dueDate, task.cycle);
+        const autoNext = calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
         el.formNextCycleDate.value = autoNext || '';
       }
 
@@ -3044,7 +3394,6 @@
       text.startsWith('Task reassigned to')
     );
   }
-
   // Helper: Collect all unique verified proof photos from comments and task
   function getTimelinePhotos(task) {
     if (!task) return [];
@@ -3054,10 +3403,11 @@
         if (c.proofImage) {
           allPhotos.push({
             src: c.proofImage,
-            date: c.completionDate || c.timestamp,
+            date: c.completionDate || c.timestamp || 'Recent',
             author: c.author || 'Store Inspector',
-            remarks: c.text && !c.text.startsWith('Task Completed on') ? c.text : '',
-            timestamp: c.timestamp
+            remarks: c.remarks || (c.text && !c.text.startsWith('✅ Maintenance Completed') && !c.text.startsWith('Task Completed on') ? c.text : ''),
+            timestamp: c.timestamp,
+            commentId: c.id
           });
         }
       });
@@ -3101,20 +3451,24 @@
     // Parse verification milestone details
     let completionDate = c.completionDate || (task && task.completedAt) || '';
     let remarks = c.remarks || '';
-    let nextCycleInfo = c.nextScheduleText || '';
+    let scheduledDueDate = c.scheduledDueDate || '';
+    let nextCycleDateStr = c.nextCycleDueDate || '';
 
-    if (!remarks || !nextCycleInfo) {
+    if (!remarks || !scheduledDueDate || !nextCycleDateStr) {
       const lines = rawText.split('\n');
       lines.forEach(line => {
         const trimmed = line.trim();
-        if (trimmed.includes('Next') && (trimmed.includes('Maintenance Scheduled') || trimmed.includes('cycle') || trimmed.includes('Upcoming') || trimmed.includes('Scheduled:'))) {
-          nextCycleInfo = trimmed.replace(/^[\s\n•-]+/, '').trim();
+        if (trimmed.includes('Task Scheduled Date:') || trimmed.includes('Task Date Sched:')) {
+          scheduledDueDate = trimmed.replace(/.*(?:Task Scheduled Date|Task Date Sched):\s*/i, '').trim();
+        } else if (trimmed.includes('Next Cycle Date:')) {
+          nextCycleDateStr = trimmed.replace(/.*Next Cycle Date:\s*/i, '').trim();
         } else if (trimmed.includes('Remarks:')) {
           const idx = trimmed.indexOf('Remarks:');
           remarks = trimmed.substring(idx + 8).trim();
+        } else if (trimmed.includes('Next') && trimmed.includes('Scheduled:')) {
+          if (!nextCycleDateStr) nextCycleDateStr = trimmed.replace(/.*Scheduled:\s*/i, '').trim();
         } else if (!trimmed.startsWith('✅') && !trimmed.startsWith('Task Completed') && !trimmed.startsWith('Completed:')) {
           if (!remarks) remarks = trimmed;
-          else if (!remarks.includes(trimmed)) remarks += ' ' + trimmed;
         }
       });
     }
@@ -3128,11 +3482,14 @@
       isVerification: true,
       author: c.author || (task && task.completedBy ? `${task.completedBy} (${task.store})` : (c.role === 'admin' ? 'Admin' : 'Store Staff')),
       role: c.role || 'store',
+      scheduledDueDate: scheduledDueDate || (task && task.dueDate),
       completionDate: completionDate,
+      nextCycleDateStr: nextCycleDateStr || c.nextScheduleText || '',
       remarks: remarks,
-      nextCycleInfo: nextCycleInfo,
       proofImage: c.proofImage || null,
-      timestamp: c.timestamp
+      timestamp: c.timestamp,
+      editedAt: c.editedAt,
+      editedBy: c.editedBy
     };
   }
 
@@ -3283,19 +3640,36 @@
                 <div class="timeline-author-info">
                   <span class="timeline-author-name">${escapeHTML(authorName)}</span>
                   <span class="timeline-role-tag tag-verified">Proof Verified ✓</span>
+                  ${c.editedAt ? `<span class="timeline-edited-tag" title="Edited on ${formatTimeDisplay(c.editedAt)} by ${escapeHTML(c.editedBy || 'Admin')}">(Edited)</span>` : ''}
                 </div>
-                <span class="timeline-time">${formatTimeDisplay(parsed.timestamp)}</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="timeline-time">${formatTimeDisplay(parsed.timestamp)}</span>
+                  ${isAdmin() ? `
+                    <button type="button" class="btn-edit-comment" onclick="window.assetApp.openEditCommentModal('${task.id}', '${c.id}')" title="Edit remark & replace photo (Admin)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                      <span>Edit</span>
+                    </button>
+                  ` : ''}
+                </div>
               </div>
 
               <!-- Structured Completion Summary Strip -->
               <div class="timeline-completion-strip">
                 <div class="timeline-completion-row">
-                  <span>✅ <strong>Maintenance Completed:</strong></span>
+                  <span>📅 <strong>Task Date Sched:</strong></span>
+                  <span class="highlight-date">${formatDateDisplay(parsed.scheduledDueDate || task.dueDate)}</span>
+                </div>
+                <div class="timeline-completion-row">
+                  <span>✅ <strong>When Completed:</strong></span>
                   <span class="highlight-date">${compDateStr}</span>
                 </div>
-                ${parsed.nextCycleInfo ? `
+                ${(parsed.nextCycleDateStr || parsed.nextCycleInfo) ? `
                   <div class="timeline-next-schedule-row">
-                    <span>🗓️ ${escapeHTML(parsed.nextCycleInfo)}</span>
+                    <span>🔄 <strong>Next Cycle Date:</strong></span>
+                    <span class="highlight-date" style="color: #7C3AED; font-weight: 600;">${formatDateDisplay(parsed.nextCycleDateStr || parsed.nextCycleInfo)}</span>
                   </div>
                 ` : ''}
               </div>
@@ -3307,7 +3681,7 @@
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                     </svg>
-                    Staff Remarks:
+                    Remarks:
                   </div>
                   <div class="timeline-remarks-text">"${escapeHTML(parsed.remarks)}"</div>
                 </div>
@@ -3358,8 +3732,20 @@
               <div class="timeline-author-info">
                 <span class="timeline-author-name">${escapeHTML(authorName)}</span>
                 ${roleTagHtml}
+                ${c.editedAt ? `<span class="timeline-edited-tag" title="Edited on ${formatTimeDisplay(c.editedAt)} by ${escapeHTML(c.editedBy || 'Admin')}">(Edited)</span>` : ''}
               </div>
-              <span class="timeline-time">${formatTimeDisplay(parsed.timestamp)}</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="timeline-time">${formatTimeDisplay(parsed.timestamp)}</span>
+                ${isAdmin() ? `
+                  <button type="button" class="btn-edit-comment" onclick="window.assetApp.openEditCommentModal('${task.id}', '${c.id}')" title="Edit comment & replace photo (Admin)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    <span>Edit</span>
+                  </button>
+                ` : ''}
+              </div>
             </div>
             <p class="timeline-message">${escapeHTML(parsed.message)}</p>
             ${parsed.proofImage ? `
@@ -3367,7 +3753,9 @@
                 <img src="${parsed.proofImage}" alt="Attachment Thumbnail" class="timeline-proof-thumb">
                 <div class="timeline-proof-details">
                   <span class="timeline-proof-title">📸 Attached Image</span>
-                  <span class="timeline-proof-cta">Click to view full image &rarr;</span>
+                  <span class="timeline-proof-cta">
+                    <span>Click to view full image</span>
+                  </span>
                 </div>
               </div>
             ` : ''}
@@ -3424,6 +3812,13 @@
             <span>📅 ${formatDateDisplay(p.date)}</span>
           </div>
           ${p.remarks ? `<div class="photo-proof-remarks">"${escapeHTML(p.remarks)}"</div>` : ''}
+          ${isAdmin() && p.commentId ? `
+            <div style="margin-top: 8px; display: flex; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditCommentModal('${task.id}', '${p.commentId}')" style="font-size: 11px; padding: 2px 8px;">
+                ✏️ Replace Photo / Edit
+              </button>
+            </div>
+          ` : ''}
         </div>
       </div>
     `).join('');
@@ -3432,11 +3827,13 @@
   // Open Comments & Timeline Drawer
   function openCommentsDrawer(taskId) {
     const task = state.tasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task || (task.isDeleted && !isAdmin())) return;
 
     state.activeDrawerTaskId = taskId;
     const isComplete = task.status === 'Completed' || Boolean(task.completedAt);
-    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+    const nextCycleDate = (task.nextCycleDueDate && (!task.dueDate || task.nextCycleDueDate > task.dueDate))
+      ? task.nextCycleDueDate
+      : calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
     const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
     const nextStatus = hasNextCycle ? calculateDateStatus(nextCycleDate) : null;
     const nextMeta = nextStatus ? getStatusMeta(nextStatus) : null;
@@ -3550,7 +3947,12 @@
     const location = el.formLocation.value.trim();
     const dueDate = el.formDueDate.value;
     const cycle = el.formCycle.value;
-    const nextCycleDueDate = el.formNextCycleDate.value || null;
+    let nextCycleDueDate = el.formNextCycleDate.value || null;
+    if (cycle && cycle !== 'One-Time Inspection' && dueDate) {
+      if (!nextCycleDueDate || nextCycleDueDate <= dueDate) {
+        nextCycleDueDate = calculateNextCycleDate(dueDate, cycle);
+      }
+    }
     const serialNumber = el.formSerial.value.trim();
     const estimatedCost = el.formCost.value ? parseFloat(el.formCost.value) : null;
     const priority = el.formPriority.value;
@@ -3658,6 +4060,147 @@
 
     closeTaskModal();
     render();
+  }
+
+  // =========================================================================
+  // Admin Edit Comment / Remark & Replace Evidence Photo Logic
+  // =========================================================================
+
+  function openEditCommentModal(taskId, commentId) {
+    if (!isAdmin()) return;
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const comment = (task.comments || []).find(c => c.id === commentId);
+    if (!comment) return;
+
+    if (el.editCommentTaskId) el.editCommentTaskId.value = taskId;
+    if (el.editCommentId) el.editCommentId.value = commentId;
+
+    const parsed = parseTimelineComment(comment, task);
+    const authorRoleTag = comment.role === 'admin' ? 'Admin HQ' : `Store Staff (${task.store})`;
+    if (el.editCommentAuthorLabel) el.editCommentAuthorLabel.textContent = `${parsed.author} • ${authorRoleTag}`;
+    if (el.editCommentTimeLabel) el.editCommentTimeLabel.textContent = `Posted on: ${formatTimeDisplay(comment.timestamp)}`;
+
+    // Set text
+    if (el.editCommentTextInput) {
+      if (parsed.isVerification) {
+        el.editCommentTextInput.value = parsed.remarks || comment.text || '';
+      } else {
+        el.editCommentTextInput.value = comment.text || '';
+      }
+    }
+
+    // Set image preview if present
+    state.editCommentImageData = comment.proofImage || null;
+    if (state.editCommentImageData) {
+      if (el.editCommentImagePreview) el.editCommentImagePreview.src = state.editCommentImageData;
+      if (el.editCommentImagePreviewWrapper) el.editCommentImagePreviewWrapper.classList.remove('hidden');
+    } else {
+      if (el.editCommentImagePreview) el.editCommentImagePreview.src = '';
+      if (el.editCommentImagePreviewWrapper) el.editCommentImagePreviewWrapper.classList.add('hidden');
+    }
+
+    if (el.editCommentModal) {
+      el.editCommentModal.classList.add('open');
+      el.editCommentModal.setAttribute('aria-hidden', 'false');
+    }
+    if (el.editCommentTextInput) el.editCommentTextInput.focus();
+  }
+
+  function closeEditCommentModal() {
+    if (!el.editCommentModal) return;
+    el.editCommentModal.classList.remove('open');
+    el.editCommentModal.setAttribute('aria-hidden', 'true');
+    state.editCommentImageData = null;
+    if (el.editCommentForm) el.editCommentForm.reset();
+  }
+
+  async function handleEditCommentImageUpload(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPEG, WebP).');
+      return;
+    }
+    try {
+      const compressed = await compressImage(file);
+      if (compressed) {
+        state.editCommentImageData = compressed;
+        if (el.editCommentImagePreview) el.editCommentImagePreview.src = compressed;
+        if (el.editCommentImagePreviewWrapper) el.editCommentImagePreviewWrapper.classList.remove('hidden');
+      }
+    } catch (e) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        state.editCommentImageData = ev.target.result;
+        if (el.editCommentImagePreview) el.editCommentImagePreview.src = ev.target.result;
+        if (el.editCommentImagePreviewWrapper) el.editCommentImagePreviewWrapper.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function handleEditCommentFormSubmit(e) {
+    e.preventDefault();
+    if (!isAdmin()) return;
+
+    const taskId = el.editCommentTaskId.value;
+    const commentId = el.editCommentId.value;
+    const newText = el.editCommentTextInput.value.trim();
+    if (!newText) {
+      alert('Please enter remark text.');
+      return;
+    }
+
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const comment = (task.comments || []).find(c => c.id === commentId);
+    if (!comment) return;
+
+    const oldImage = comment.proofImage;
+    const newImage = state.editCommentImageData;
+
+    comment.editedAt = new Date().toISOString();
+    comment.editedBy = getCurrentUserLabel();
+
+    if (comment.isVerification) {
+      comment.remarks = newText;
+      comment.proofImage = newImage;
+
+      const schedDate = comment.scheduledDueDate || task.dueDate;
+      const compDate = comment.completionDate || task.completedAt || TODAY_STR;
+      const nextDate = comment.nextCycleDueDate || task.nextCycleDueDate;
+
+      comment.text = `✅ Maintenance Completed\nTask Scheduled Date: ${formatDateDisplay(schedDate)}\nCompleted on: ${formatDateDisplay(compDate)} by ${comment.author || 'Staff'}\nNext Cycle Date: ${nextDate ? formatDateDisplay(nextDate) : 'None'}\nRemarks: ${newText}`;
+
+      if (task.proofImage === oldImage || !task.proofImage) {
+        task.proofImage = newImage;
+      }
+      task.completionRemarks = newText;
+    } else {
+      comment.text = newText;
+      comment.proofImage = newImage;
+    }
+
+    saveState();
+    syncTaskToCloud(task);
+
+    // Cross-notify the store account that Admin updated remarks/proof
+    sendAppNotification({
+      target: task.store,
+      type: 'remark_updated',
+      title: 'Remark / Proof Updated by Admin',
+      message: `Admin updated remarks/evidence photo on "${task.assetName}".`,
+      taskId: task.id,
+      sender: 'Admin (Headquarters)'
+    });
+
+    closeEditCommentModal();
+
+    if (state.activeDrawerTaskId === taskId) {
+      switchDrawerTab(state.drawerActiveTab || 'all');
+    }
+    render();
+    showToast(`Remark and photo updated & synced to ${task.store} account.`);
   }
 
   // Handle Comment Submit
@@ -3871,6 +4414,63 @@
     });
     el.addStoreForm.addEventListener('submit', handleAddStoreSubmit);
 
+    // Recycle Bin Event Listeners
+    if (el.btnRecycleBin) el.btnRecycleBin.addEventListener('click', openRecycleBinModal);
+    if (el.btnOpenRecycleBin) el.btnOpenRecycleBin.addEventListener('click', openRecycleBinModal);
+    if (el.btnRecycleBinClose) el.btnRecycleBinClose.addEventListener('click', closeRecycleBinModal);
+    if (el.btnRecycleBinDone) el.btnRecycleBinDone.addEventListener('click', closeRecycleBinModal);
+    if (el.btnRestoreAllTrash) el.btnRestoreAllTrash.addEventListener('click', restoreAllDeletedTasks);
+    if (el.btnEmptyTrash) el.btnEmptyTrash.addEventListener('click', emptyRecycleBin);
+    if (el.recycleBinModal) {
+      el.recycleBinModal.addEventListener('click', (e) => {
+        if (e.target === el.recycleBinModal) closeRecycleBinModal();
+      });
+    }
+
+    // Edit Comment & Replace Image Event Listeners
+    if (el.btnEditCommentClose) el.btnEditCommentClose.addEventListener('click', closeEditCommentModal);
+    if (el.btnEditCommentCancel) el.btnEditCommentCancel.addEventListener('click', closeEditCommentModal);
+    if (el.editCommentModal) {
+      el.editCommentModal.addEventListener('click', (e) => {
+        if (e.target === el.editCommentModal) closeEditCommentModal();
+      });
+    }
+    if (el.editCommentForm) el.editCommentForm.addEventListener('submit', handleEditCommentFormSubmit);
+    if (el.editCommentUploadZone) {
+      el.editCommentUploadZone.addEventListener('click', () => {
+        if (el.editCommentFileInput) el.editCommentFileInput.click();
+      });
+      el.editCommentUploadZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        el.editCommentUploadZone.style.borderColor = '#2563EB';
+      });
+      el.editCommentUploadZone.addEventListener('dragleave', () => {
+        el.editCommentUploadZone.style.borderColor = '';
+      });
+      el.editCommentUploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.editCommentUploadZone.style.borderColor = '';
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleEditCommentImageUpload(e.dataTransfer.files[0]);
+        }
+      });
+    }
+    if (el.editCommentFileInput) {
+      el.editCommentFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleEditCommentImageUpload(e.target.files[0]);
+        }
+      });
+    }
+    if (el.btnEditCommentRemoveImage) {
+      el.btnEditCommentRemoveImage.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.editCommentImageData = null;
+        if (el.editCommentImagePreview) el.editCommentImagePreview.src = '';
+        if (el.editCommentImagePreviewWrapper) el.editCommentImagePreviewWrapper.classList.add('hidden');
+      });
+    }
+
     el.adminStoreQuickSwitch.addEventListener('change', (e) => {
       state.filterStore = e.target.value;
       if (el.filterStore) el.filterStore.value = e.target.value;
@@ -3940,28 +4540,32 @@
       render();
     });
 
-    el.viewToggleGrid.addEventListener('click', () => {
-      state.viewMode = 'grid';
-      el.viewToggleGrid.classList.add('active');
-      el.viewToggleTable.classList.remove('active');
-      if (el.viewToggleCalendar) el.viewToggleCalendar.classList.remove('active');
-      render();
-    });
+    if (el.viewToggleGrid) {
+      el.viewToggleGrid.addEventListener('click', () => {
+        state.viewMode = 'grid';
+        el.viewToggleGrid.classList.add('active');
+        if (el.viewToggleTable) el.viewToggleTable.classList.remove('active');
+        if (el.viewToggleCalendar) el.viewToggleCalendar.classList.remove('active');
+        render();
+      });
+    }
 
-    el.viewToggleTable.addEventListener('click', () => {
-      state.viewMode = 'table';
-      el.viewToggleTable.classList.add('active');
-      el.viewToggleGrid.classList.remove('active');
-      if (el.viewToggleCalendar) el.viewToggleCalendar.classList.remove('active');
-      render();
-    });
+    if (el.viewToggleTable) {
+      el.viewToggleTable.addEventListener('click', () => {
+        state.viewMode = 'table';
+        el.viewToggleTable.classList.add('active');
+        if (el.viewToggleGrid) el.viewToggleGrid.classList.remove('active');
+        if (el.viewToggleCalendar) el.viewToggleCalendar.classList.remove('active');
+        render();
+      });
+    }
 
     if (el.viewToggleCalendar) {
       el.viewToggleCalendar.addEventListener('click', () => {
         state.viewMode = 'calendar';
         el.viewToggleCalendar.classList.add('active');
-        el.viewToggleGrid.classList.remove('active');
-        el.viewToggleTable.classList.remove('active');
+        if (el.viewToggleTable) el.viewToggleTable.classList.remove('active');
+        if (el.viewToggleGrid) el.viewToggleGrid.classList.remove('active');
         render();
       });
     }
@@ -4235,6 +4839,14 @@
           closeExportModal();
           return;
         }
+        if (el.editCommentModal && el.editCommentModal.classList.contains('open')) {
+          closeEditCommentModal();
+          return;
+        }
+        if (el.recycleBinModal && el.recycleBinModal.classList.contains('open')) {
+          closeRecycleBinModal();
+          return;
+        }
         if (el.storeManagementModal && el.storeManagementModal.classList.contains('open')) {
           closeStoreManagementModal();
           return;
@@ -4261,6 +4873,7 @@
   }
 
   let draggedTaskId = null;
+  let draggedEventType = null;
 
   function setupTaskDragAndDrop() {
     const grid = el.taskGrid;
@@ -4270,6 +4883,7 @@
       const item = e.target.closest('[data-task-id]');
       if (!item) return;
       draggedTaskId = item.getAttribute('data-task-id');
+      draggedEventType = item.getAttribute('data-event-type') || 'due';
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', draggedTaskId);
       setTimeout(() => item.classList.add('is-dragging'), 0);
@@ -4280,6 +4894,7 @@
       if (item) item.classList.remove('is-dragging');
       document.querySelectorAll('.is-dragging').forEach(elem => elem.classList.remove('is-dragging'));
       draggedTaskId = null;
+      draggedEventType = null;
     }
 
     function handleDragOver(e) {
@@ -4349,6 +4964,14 @@
     updateStorePin: updateStorePin,
     deleteStoreAccount: deleteStoreAccount,
     deleteTask: deleteTask,
+    openRecycleBin: openRecycleBinModal,
+    closeRecycleBin: closeRecycleBinModal,
+    restoreTask: restoreTask,
+    restoreAllDeletedTasks: restoreAllDeletedTasks,
+    permanentlyDeleteTask: permanentlyDeleteTask,
+    emptyRecycleBin: emptyRecycleBin,
+    openEditCommentModal: openEditCommentModal,
+    closeEditCommentModal: closeEditCommentModal,
     updateTaskCondition: updateTaskCondition,
     addCustomCategory: addCustomCategory,
     addCustomCondition: addCustomCondition,

@@ -8,7 +8,7 @@ $serverFound = $false
 foreach ($port in $ports) {
     $baseUrl = "http://localhost:$port"
     try {
-        $test = Invoke-WebRequest -Uri "$baseUrl/" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+        $null = Invoke-WebRequest -Uri "$baseUrl/" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
         Write-Host "[OK] Server detected running on $baseUrl" -ForegroundColor Green
         $serverFound = $true
         
