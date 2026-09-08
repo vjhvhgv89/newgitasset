@@ -186,10 +186,8 @@
   // Calculate task status based on scheduled due date and next recurring cycle
   function calculateTaskStatus(task) {
     if (!task) return 'Upcoming';
-    const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-    if (isComplete && nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection') {
-      return calculateDateStatus(nextCycleDate);
+    if (task.status === 'Completed' && (!task.cycle || task.cycle === 'One-Time Inspection')) {
+      return 'Completed';
     }
     return calculateDateStatus(task.dueDate);
   }
@@ -197,11 +195,8 @@
   // Get contextual display status for a task
   function getTaskDisplayStatus(task) {
     if (!task) return 'Upcoming';
-    const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-    const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-    const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
-    if (isComplete && hasNextCycle) {
-      return calculateDateStatus(nextCycleDate);
+    if (task.status === 'Completed' && (!task.cycle || task.cycle === 'One-Time Inspection')) {
+      return 'Completed';
     }
     return calculateDateStatus(task.dueDate);
   }
@@ -389,26 +384,44 @@
       snapshot.forEach(doc => {
         const t = doc.data();
         const docData = doc.data();
-        const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))))));
-
-        if (t.status === 'Completed' || hasVerification) {
-          const wasNotCompletedInDoc = docData.status !== 'Completed';
-          t.status = 'Completed';
-          if (!t.completedAt && t.comments) {
-            const verif = [...t.comments].reverse().find(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))));
-            if (verif) {
-              t.completedAt = verif.completionDate || (verif.timestamp ? verif.timestamp.split('T')[0] : TODAY_STR);
-              if (!t.completedBy && verif.author) {
-                t.completedBy = verif.author.split('(')[0].trim();
+        // Recurring vs One-Time Maintenance status & cycle handling
+        if (t.cycle && t.cycle !== 'One-Time Inspection') {
+          if (t.comments && t.comments.length) {
+            const latestVerif = [...t.comments].reverse().find(c => !c.isDeleted && (c.isVerification || (c.text && c.text.includes('Next Cycle Date:'))));
+            if (latestVerif) {
+              let expectedNext = latestVerif.nextCycleDueDate;
+              if (!expectedNext && latestVerif.text) {
+                const match = latestVerif.text.match(/Next Cycle Date:\s*([^\n\r]+)/i);
+                if (match) {
+                  const d = new Date(match[1].trim());
+                  if (!isNaN(d.getTime())) {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    expectedNext = `${y}-${m}-${day}`;
+                  }
+                }
+              }
+              if (expectedNext && t.dueDate > expectedNext) {
+                t.dueDate = expectedNext;
+                t.nextCycleDueDate = calculateNextCycleDate(expectedNext, t.cycle);
               }
             }
           }
-          if (!t.completedAt) t.completedAt = TODAY_STR;
-          if (wasNotCompletedInDoc) {
-            syncTaskToCloud(t);
+          t.completedAt = null;
+          t.completedBy = null;
+          t.status = calculateDateStatus(t.dueDate);
+          if (!t.nextCycleDueDate || t.nextCycleDueDate <= t.dueDate) {
+            t.nextCycleDueDate = calculateNextCycleDate(t.dueDate, t.cycle);
           }
         } else {
-          t.status = calculateTaskStatus(t);
+          const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))))));
+          if (t.status === 'Completed' || hasVerification) {
+            t.status = 'Completed';
+            if (!t.completedAt) t.completedAt = TODAY_STR;
+          } else {
+            t.status = calculateDateStatus(t.dueDate);
+          }
         }
         cloudTasks.push(t);
       });
@@ -553,31 +566,42 @@
     }
 
     state.tasks.forEach(t => {
-      const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))))));
-
-      if (t.status === 'Completed' || t.completedAt || hasVerification) {
-        const wasNotCompleted = t.status !== 'Completed';
-        t.status = 'Completed';
-        if (!t.completedAt && t.comments) {
-          const verif = [...t.comments].reverse().find(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))));
-          if (verif) {
-            t.completedAt = verif.completionDate || (verif.timestamp ? verif.timestamp.split('T')[0] : TODAY_STR);
-            if (!t.completedBy && verif.author) {
-              t.completedBy = verif.author.split('(')[0].trim();
+      if (t.cycle && t.cycle !== 'One-Time Inspection') {
+        if (t.comments && t.comments.length) {
+          const latestVerif = [...t.comments].reverse().find(c => !c.isDeleted && (c.isVerification || (c.text && c.text.includes('Next Cycle Date:'))));
+          if (latestVerif) {
+            let expectedNext = latestVerif.nextCycleDueDate;
+            if (!expectedNext && latestVerif.text) {
+              const match = latestVerif.text.match(/Next Cycle Date:\s*([^\n\r]+)/i);
+              if (match) {
+                const d = new Date(match[1].trim());
+                if (!isNaN(d.getTime())) {
+                  const y = d.getFullYear();
+                  const m = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  expectedNext = `${y}-${m}-${day}`;
+                }
+              }
+            }
+            if (expectedNext && t.dueDate > expectedNext) {
+              t.dueDate = expectedNext;
+              t.nextCycleDueDate = calculateNextCycleDate(expectedNext, t.cycle);
             }
           }
         }
-        if (!t.completedAt) t.completedAt = TODAY_STR;
-        if (wasNotCompleted) {
-          syncTaskToCloud(t);
-        }
-      } else {
-        t.status = calculateTaskStatus(t);
-      }
-
-      if (t.cycle && t.cycle !== 'One-Time Inspection' && t.dueDate) {
+        t.completedAt = null;
+        t.completedBy = null;
+        t.status = calculateDateStatus(t.dueDate);
         if (!t.nextCycleDueDate || t.nextCycleDueDate <= t.dueDate) {
           t.nextCycleDueDate = calculateNextCycleDate(t.dueDate, t.cycle);
+        }
+      } else {
+        const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))))));
+        if (t.status === 'Completed' || hasVerification) {
+          t.status = 'Completed';
+          if (!t.completedAt) t.completedAt = TODAY_STR;
+        } else {
+          t.status = calculateDateStatus(t.dueDate);
         }
       }
 
@@ -1545,14 +1569,9 @@
         return false;
       }
 
-      const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-      const primaryStatus = calculateDateStatus(task.dueDate);
-      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
-      const hasNextCycle = Boolean(nextCycleDate && task.cycle && task.cycle !== 'One-Time Inspection');
-      const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
+      const effectiveStatus = getTaskDisplayStatus(task);
 
       if (state.filterStatus !== 'all') {
-        const effectiveStatus = (isComplete && hasNextCycle) ? nextCycleStatus : primaryStatus;
         if (state.filterStatus === 'overdue' && effectiveStatus !== 'Overdue') return false;
         if (state.filterStatus === 'due-today' && effectiveStatus !== 'Due Today') return false;
         if (state.filterStatus === 'due-soon' && effectiveStatus !== 'Due Soon') return false;
@@ -1614,13 +1633,7 @@
     let upcoming = 0;
 
     scopeTasks.forEach(t => {
-      const isComplete = (t.status === 'Completed' || Boolean(t.completedAt));
-      const primaryStatus = calculateDateStatus(t.dueDate);
-      const nextCycleDate = t.nextCycleDueDate || calculateNextCycleDate(t.dueDate || TODAY_STR, t.cycle);
-      const hasNextCycle = Boolean(nextCycleDate && t.cycle && t.cycle !== 'One-Time Inspection');
-      const nextCycleStatus = (isComplete && hasNextCycle) ? calculateDateStatus(nextCycleDate) : null;
-
-      const effectiveStatus = (isComplete && hasNextCycle) ? nextCycleStatus : primaryStatus;
+      const effectiveStatus = getTaskDisplayStatus(t);
       if (effectiveStatus === 'Overdue') overdue++;
       else if (effectiveStatus === 'Due Today') dueToday++;
       else if (effectiveStatus === 'Due Soon') dueSoon++;
@@ -1752,7 +1765,9 @@
 
       // Compute Next Maintenance Cycle indicator from specific scheduled date or cycle calculation
       let nextCycleMarkup = '';
-      const nextCycleDate = task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
+      const nextCycleDate = (task.nextCycleDueDate && task.nextCycleDueDate > (task.dueDate || TODAY_STR))
+        ? task.nextCycleDueDate
+        : calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle);
       const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
       let nextMeta = null;
 
@@ -1823,8 +1838,8 @@
                 <span class="meta-value" title="${escapeHTML(task.store)}">${escapeHTML(task.store)}</span>
               </div>
               <div class="meta-item">
-                <span class="meta-label">${(state.filterStatus === 'completed' || (isComplete && state.filterStatus === 'all')) ? 'Completed Date' : 'Due Date'}</span>
-                <span class="meta-value">${(state.filterStatus === 'completed' || (isComplete && state.filterStatus === 'all')) ? formatDateDisplay(task.completedAt) : formatDateDisplay((isComplete && hasNextCycle) ? nextCycleDate : task.dueDate)}</span>
+                <span class="meta-label">${(task.status === 'Completed' && task.completedAt && task.cycle === 'One-Time Inspection') ? 'Completed Date' : 'Due Date'}</span>
+                <span class="meta-value">${(task.status === 'Completed' && task.completedAt && task.cycle === 'One-Time Inspection') ? formatDateDisplay(task.completedAt) : formatDateDisplay(task.dueDate)}</span>
               </div>
               <div class="meta-item">
                 <span class="meta-label">Cycle / Condition</span>
@@ -1954,17 +1969,15 @@
       const commentCount = (task.comments && task.comments.filter(c => !c.isDeleted).length) || 0;
       const condClass = getConditionClass(task.condition);
 
-      const targetDueDate = (isComplete && (task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle)))
-        ? (task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle))
-        : (task.dueDate || TODAY_STR);
+      const displayDueDate = task.dueDate || TODAY_STR;
 
       // Next Cycle Date strictly follows the displayed due date:
       let nextCycleDate = null;
       if (task.cycle && task.cycle !== 'One-Time Inspection') {
-        if (task.nextCycleDueDate && task.nextCycleDueDate > targetDueDate) {
+        if (task.nextCycleDueDate && task.nextCycleDueDate > displayDueDate) {
           nextCycleDate = task.nextCycleDueDate;
         } else {
-          nextCycleDate = calculateNextCycleDate(targetDueDate, task.cycle);
+          nextCycleDate = calculateNextCycleDate(displayDueDate, task.cycle);
         }
       }
       const hasNextCycle = Boolean(nextCycleDate && task.cycle !== 'One-Time Inspection');
@@ -1984,7 +1997,7 @@
       }
 
       const dateCellHtml = `
-        <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(targetDueDate)}</span></div>
+        <div><span style="font-weight:600; color:var(--text-main);">${formatDateDisplay(displayDueDate)}</span></div>
         <small style="color: var(--text-muted);">${escapeHTML(task.cycle)}</small>
       `;
 
@@ -3565,11 +3578,11 @@
     const nowIso = new Date().toISOString();
     const proofUrl = state.completionAttachedImageData;
 
-    // 1. Compute Next Maintenance Cycle due date
-    let nextDate = task.nextCycleDueDate;
-    if (!nextDate || nextDate <= completionDate) {
-      nextDate = calculateNextCycleDate(task.dueDate || completionDate, task.cycle);
-    }
+    // 1. Compute Next Maintenance Cycle due date from the scheduled date being completed
+    const baseScheduledDate = task.dueDate || completionDate;
+    const nextDate = (task.cycle && task.cycle !== 'One-Time Inspection')
+      ? calculateNextCycleDate(baseScheduledDate, task.cycle)
+      : null;
     let nextStatusText = '';
     if (nextDate && task.cycle !== 'One-Time Inspection') {
       const nextCycleStatus = calculateDateStatus(nextDate);
@@ -4287,7 +4300,7 @@
       el.drawerStatusBadge.className = `status-chip ${displayMeta.className}`;
     }
     if (el.drawerDueBadge) {
-      el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt)
+      el.drawerDueBadge.textContent = (task.status === 'Completed' && task.completedAt && task.cycle === 'One-Time Inspection')
         ? `Completed: ${formatDateDisplay(task.completedAt)}`
         : `Due: ${formatDateDisplay(task.dueDate)}`;
     }
