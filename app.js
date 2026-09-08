@@ -128,7 +128,10 @@
     // Admin Edit Comment State
     editingCommentTaskId: null,
     editingCommentId: null,
-    editCommentImageData: null
+    editCommentImageData: null,
+
+    // Recycle Bin Active Tab
+    recycleBinTab: 'tasks'
   };
 
   // Helper: Format Date
@@ -697,7 +700,12 @@
     btnRecycleBinClose: document.getElementById('btn-recycle-bin-close'),
     btnRecycleBinDone: document.getElementById('btn-recycle-bin-done'),
     recycleBinTbody: document.getElementById('recycle-bin-tbody'),
+    recycleBinThead: document.getElementById('recycle-bin-thead'),
     recycleBinCountBadge: document.getElementById('recycle-bin-count-badge'),
+    tabTrashTasks: document.getElementById('tab-trash-tasks'),
+    tabTrashComments: document.getElementById('tab-trash-comments'),
+    trashTasksCount: document.getElementById('trash-tasks-count'),
+    trashCommentsCount: document.getElementById('trash-comments-count'),
     btnRestoreAllTrash: document.getElementById('btn-restore-all-trash'),
     btnEmptyTrash: document.getElementById('btn-empty-trash'),
 
@@ -1173,7 +1181,7 @@
     const rows = tasks.map(t => {
       const isComplete = t.status === 'Completed' || Boolean(t.completedAt);
       const commentsCount = (t.comments && t.comments.length) || 0;
-      const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => c.proofImage)?.proofImage) || '';
+      const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => !c.isDeleted && c.proofImage)?.proofImage) || '';
 
       return [
         t.id,
@@ -1242,7 +1250,7 @@
 
     const tableRowsHtml = tasks.map((t, idx) => {
       const isComplete = t.status === 'Completed' || Boolean(t.completedAt);
-      const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => c.proofImage)?.proofImage) || '';
+      const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => !c.isDeleted && c.proofImage)?.proofImage) || '';
       const performer = t.completedBy || (isComplete ? 'Store Staff' : '—');
       const remarks = t.completionRemarks || (t.comments && t.comments.length ? t.comments[t.comments.length - 1].text : '—');
 
@@ -1664,15 +1672,23 @@
       el.btnCreateTask.classList.remove('hidden');
       el.filterStoreWrapper.classList.remove('hidden');
 
-      const deletedCount = state.tasks.filter(t => t.isDeleted).length;
+      const deletedTasksCount = state.tasks.filter(t => t.isDeleted).length;
+      let deletedCommentsCount = 0;
+      state.tasks.forEach(t => {
+        (t.comments || []).forEach(c => {
+          if (c.isDeleted) deletedCommentsCount++;
+        });
+      });
+      const totalDeletedCount = deletedTasksCount + deletedCommentsCount;
+
       if (el.sideCountTrash) {
-        el.sideCountTrash.textContent = deletedCount;
-        if (deletedCount > 0) el.sideCountTrash.classList.remove('hidden');
+        el.sideCountTrash.textContent = totalDeletedCount;
+        if (totalDeletedCount > 0) el.sideCountTrash.classList.remove('hidden');
         else el.sideCountTrash.classList.add('hidden');
       }
       if (el.recycleBinToolbarCount) {
-        el.recycleBinToolbarCount.textContent = deletedCount;
-        if (deletedCount > 0) el.recycleBinToolbarCount.classList.remove('hidden');
+        el.recycleBinToolbarCount.textContent = totalDeletedCount;
+        if (totalDeletedCount > 0) el.recycleBinToolbarCount.classList.remove('hidden');
         else el.recycleBinToolbarCount.classList.add('hidden');
       }
 
@@ -1730,8 +1746,8 @@
       const commentCount = (task.comments && task.comments.length) || 0;
       const condClass = getConditionClass(task.condition);
 
-      const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => c.proofImage)));
-      const latestProof = task.proofImage || (task.comments && [...task.comments].reverse().find(c => c.proofImage)?.proofImage);
+      const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => !c.isDeleted && c.proofImage)));
+      const latestProof = task.proofImage || (task.comments && [...task.comments].reverse().find(c => !c.isDeleted && c.proofImage)?.proofImage);
 
       // Compute Next Maintenance Cycle indicator from specific scheduled date or cycle calculation
       let nextCycleMarkup = '';
@@ -2660,86 +2676,210 @@
     el.recycleBinModal.setAttribute('aria-hidden', 'true');
   }
 
+  function switchRecycleBinTab(tabName) {
+    state.recycleBinTab = tabName;
+    renderRecycleBinModal();
+  }
+
   function renderRecycleBinModal() {
     if (!el.recycleBinTbody) return;
     const deletedTasks = state.tasks.filter(t => t.isDeleted);
-    const count = deletedTasks.length;
+    const deletedComments = [];
+    state.tasks.forEach(t => {
+      (t.comments || []).forEach(c => {
+        if (c.isDeleted) {
+          deletedComments.push({ task: t, comment: c });
+        }
+      });
+    });
 
-    if (el.recycleBinCountBadge) {
-      el.recycleBinCountBadge.textContent = `${count} deleted task${count === 1 ? '' : 's'}`;
-    }
-    if (el.btnRestoreAllTrash) {
-      el.btnRestoreAllTrash.disabled = (count === 0);
-    }
-    if (el.btnEmptyTrash) {
-      el.btnEmptyTrash.disabled = (count === 0);
-    }
+    if (el.trashTasksCount) el.trashTasksCount.textContent = deletedTasks.length;
+    if (el.trashCommentsCount) el.trashCommentsCount.textContent = deletedComments.length;
 
-    if (count === 0) {
-      el.recycleBinTbody.innerHTML = `
-        <tr>
-          <td colspan="5">
-            <div class="recycle-bin-empty-state">
-              <svg class="recycle-bin-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-              </svg>
-              <h4 style="margin: 0 0 6px 0; font-size: 15px; color: var(--text-main);">Recycle Bin is Empty</h4>
-              <p style="margin: 0; font-size: 13px; color: var(--text-muted);">No deleted tasks in trash. Tasks moved to the trash can be safely restored here at any time.</p>
-            </div>
-          </td>
-        </tr>
-      `;
-      return;
-    }
+    const currentTab = state.recycleBinTab || 'tasks';
 
-    el.recycleBinTbody.innerHTML = deletedTasks.map(task => {
-      const deletedDateStr = task.deletedAt ? new Date(task.deletedAt).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }) : 'Recently';
+    if (el.tabTrashTasks) el.tabTrashTasks.classList.toggle('active', currentTab === 'tasks');
+    if (el.tabTrashComments) el.tabTrashComments.classList.toggle('active', currentTab === 'comments');
 
-      return `
-        <tr data-deleted-task-id="${escapeHTML(task.id)}">
-          <td>
-            <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(task.assetName)}</div>
-            <div style="font-size: 11.5px; color: var(--text-muted);">${escapeHTML(task.category || 'Equipment')} • SN: ${escapeHTML(task.serialNumber || 'N/A')}</div>
-          </td>
-          <td>
-            <span class="store-badge">${escapeHTML(task.store)}</span>
-          </td>
-          <td>
-            <div style="font-size: 12.5px; font-weight: 500;">${escapeHTML(task.cycle || 'Monthly')}</div>
-            <div style="font-size: 11px; color: var(--text-muted);">Due: ${formatDateDisplay(task.dueDate)}</div>
-          </td>
-          <td>
-            <div style="font-size: 12px; color: var(--text-main); font-weight: 500;">${escapeHTML(deletedDateStr)}</div>
-            <div style="font-size: 11px; color: var(--text-muted);">By: ${escapeHTML(task.deletedBy || 'Admin')}</div>
-          </td>
-          <td style="text-align: right;">
-            <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
-              <button type="button" class="btn btn-sm btn-restore" onclick="window.assetApp.restoreTask('${task.id}')" title="Restore task to active schedule">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="1 4 1 10 7 10"></polyline>
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+    if (currentTab === 'tasks') {
+      const count = deletedTasks.length;
+      if (el.btnRestoreAllTrash) el.btnRestoreAllTrash.disabled = (count === 0);
+      if (el.btnEmptyTrash) el.btnEmptyTrash.disabled = (count === 0);
+
+      if (el.recycleBinThead) {
+        el.recycleBinThead.innerHTML = `
+          <tr>
+            <th>Asset Name</th>
+            <th>Store Branch</th>
+            <th>Maintenance Cycle</th>
+            <th>Deleted At</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        `;
+      }
+
+      if (count === 0) {
+        el.recycleBinTbody.innerHTML = `
+          <tr>
+            <td colspan="5">
+              <div class="recycle-bin-empty-state">
+                <svg class="recycle-bin-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
-                <span>Restore</span>
-              </button>
-              <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.permanentlyDeleteTask('${task.id}')" title="Permanently delete task forever">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                <h4 style="margin: 0 0 6px 0; font-size: 15px; color: var(--text-main);">No Deleted Tasks</h4>
+                <p style="margin: 0; font-size: 13px; color: var(--text-muted);">No deleted tasks in trash. Tasks moved to the trash can be safely restored here at any time.</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      el.recycleBinTbody.innerHTML = deletedTasks.map(task => {
+        const deletedDateStr = task.deletedAt ? new Date(task.deletedAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : 'Recently';
+
+        return `
+          <tr data-deleted-task-id="${escapeHTML(task.id)}">
+            <td>
+              <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(task.assetName)}</div>
+              <div style="font-size: 11.5px; color: var(--text-muted);">${escapeHTML(task.category || 'Equipment')} • SN: ${escapeHTML(task.serialNumber || 'N/A')}</div>
+            </td>
+            <td>
+              <span class="store-badge">${escapeHTML(task.store)}</span>
+            </td>
+            <td>
+              <div style="font-size: 12.5px; font-weight: 500;">${escapeHTML(task.cycle || 'Monthly')}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Due: ${formatDateDisplay(task.dueDate)}</div>
+            </td>
+            <td>
+              <div style="font-size: 12px; color: var(--text-main); font-weight: 500;">${escapeHTML(deletedDateStr)}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">By: ${escapeHTML(task.deletedBy || 'Admin')}</div>
+            </td>
+            <td style="text-align: right;">
+              <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                <button type="button" class="btn btn-sm btn-restore" onclick="window.assetApp.restoreTask('${task.id}')" title="Restore task to active schedule">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="1 4 1 10 7 10"></polyline>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                  </svg>
+                  <span>Restore</span>
+                </button>
+                <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.permanentlyDeleteTask('${task.id}')" title="Permanently delete task forever">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  <span>Delete Forever</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } else {
+      // COMMENTS TAB
+      const count = deletedComments.length;
+      if (el.btnRestoreAllTrash) el.btnRestoreAllTrash.disabled = (count === 0);
+      if (el.btnEmptyTrash) el.btnEmptyTrash.disabled = (count === 0);
+
+      if (el.recycleBinThead) {
+        el.recycleBinThead.innerHTML = `
+          <tr>
+            <th>Asset &amp; Store</th>
+            <th>Remark &amp; Author</th>
+            <th>Evidence Photo</th>
+            <th>Deleted At</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        `;
+      }
+
+      if (count === 0) {
+        el.recycleBinTbody.innerHTML = `
+          <tr>
+            <td colspan="5">
+              <div class="recycle-bin-empty-state">
+                <svg class="recycle-bin-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                 </svg>
-                <span>Delete Forever</span>
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
+                <h4 style="margin: 0 0 6px 0; font-size: 15px; color: var(--text-main);">No Deleted Remarks</h4>
+                <p style="margin: 0; font-size: 13px; color: var(--text-muted);">No deleted remarks or comments in trash. Remarks deleted by admin can be safely restored here at any time.</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      el.recycleBinTbody.innerHTML = deletedComments.map(({ task, comment }) => {
+        const deletedDateStr = comment.deletedAt ? new Date(comment.deletedAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : 'Recently';
+
+        const parsed = parseTimelineComment(comment, task);
+        const remarkSnippet = parsed.remarks || parsed.message || comment.text || '—';
+        const photoUrl = comment.proofImage || parsed.proofImage;
+
+        return `
+          <tr data-deleted-comment-id="${escapeHTML(comment.id)}">
+            <td>
+              <div style="font-weight: 600; color: var(--text-main);">${escapeHTML(task.assetName)}</div>
+              <span class="store-badge" style="margin-top: 4px; display: inline-block;">${escapeHTML(task.store)}</span>
+            </td>
+            <td style="max-width: 240px;">
+              <div style="font-size: 11px; font-weight: 600; color: var(--primary); margin-bottom: 2px;">
+                ${escapeHTML(parsed.author || comment.author || 'Store Staff')}
+                ${comment.isVerification ? '<span class="timeline-role-tag tag-verified" style="font-size: 9px; padding: 1px 4px; margin-left: 4px;">Verified</span>' : ''}
+              </div>
+              <div style="font-size: 12.5px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHTML(remarkSnippet)}">
+                "${escapeHTML(remarkSnippet)}"
+              </div>
+            </td>
+            <td>
+              ${photoUrl ? `
+                <div style="cursor: pointer; display: inline-block;" onclick="window.assetApp.openLightbox('${photoUrl}', '${escapeHTML(task.assetName)} — Deleted Remark Photo')">
+                  <img src="${photoUrl}" alt="Proof" style="width: 38px; height: 38px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-color); display: block;">
+                </div>
+              ` : '<span style="color: var(--text-muted); font-size: 12px;">—</span>'}
+            </td>
+            <td>
+              <div style="font-size: 12px; color: var(--text-main); font-weight: 500;">${escapeHTML(deletedDateStr)}</div>
+              <div style="font-size: 11px; color: var(--text-muted);">By: ${escapeHTML(comment.deletedBy || 'Admin')}</div>
+            </td>
+            <td style="text-align: right;">
+              <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                <button type="button" class="btn btn-sm btn-restore" onclick="window.assetApp.restoreComment('${task.id}', '${comment.id}')" title="Restore remark back to task timeline">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="1 4 1 10 7 10"></polyline>
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                  </svg>
+                  <span>Restore</span>
+                </button>
+                <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.permanentlyDeleteComment('${task.id}', '${comment.id}')" title="Permanently delete remark forever">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  <span>Delete Forever</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
   }
 
   function restoreTask(taskId) {
@@ -2769,8 +2909,229 @@
     showToast(`Restored "${task.assetName}" back to ${task.store} active tasks.`);
   }
 
+  function restoreComment(taskId, commentId) {
+    if (!isAdmin()) return;
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const comment = (task.comments || []).find(c => c.id === commentId);
+    if (!comment) return;
+
+    comment.isDeleted = false;
+    delete comment.deletedAt;
+    delete comment.deletedBy;
+
+    // Restore proof image to task if task currently lacks an active proofImage
+    if (comment.proofImage && !task.proofImage) {
+      task.proofImage = comment.proofImage;
+    }
+    if (comment.remarks && !task.completionRemarks) {
+      task.completionRemarks = comment.remarks;
+    }
+
+    saveState();
+    syncTaskToCloud(task);
+
+    if (state.activeDrawerTaskId === taskId) {
+      switchDrawerTab(state.drawerActiveTab || 'all');
+    }
+    render();
+    updateKPIsAndHeader();
+    renderRecycleBinModal();
+    showToast(`Restored remark and photo back to "${task.assetName}".`);
+  }
+
+  function permanentlyDeleteComment(taskId, commentId) {
+    if (!isAdmin()) return;
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const commentIdx = (task.comments || []).findIndex(c => c.id === commentId);
+    if (commentIdx === -1) return;
+    const comment = task.comments[commentIdx];
+
+    showConfirmModal({
+      title: 'Permanently Delete Remark?',
+      message: `Are you sure you want to permanently delete this remark?<br><br><small style="color: #DC2626;">This action cannot be undone and will permanently remove this remark and its attached image from both cloud and local databases.</small>`,
+      iconType: 'danger',
+      okText: 'Delete Forever',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        const delProof = comment.proofImage;
+        task.comments.splice(commentIdx, 1);
+
+        if (delProof && task.proofImage === delProof) {
+          const remainingProof = (task.comments || [])
+            .filter(c => !c.isDeleted && c.proofImage)
+            .reverse()[0]?.proofImage || null;
+          task.proofImage = remainingProof;
+        }
+
+        saveState();
+        syncTaskToCloud(task);
+
+        if (state.activeDrawerTaskId === taskId) {
+          switchDrawerTab(state.drawerActiveTab || 'all');
+        }
+        render();
+        updateKPIsAndHeader();
+        renderRecycleBinModal();
+        showToast('Remark permanently deleted.');
+      }
+    });
+  }
+
+  function deleteCommentToRecycleBin(taskId, commentId) {
+    if (!isAdmin()) return;
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const comment = (task.comments || []).find(c => c.id === commentId);
+    if (!comment) return;
+
+    showConfirmModal({
+      title: 'Move Remark to Recycle Bin?',
+      message: `Are you sure you want to move this remark to the Recycle Bin?<br><br><small style="color: var(--text-muted);">This remark and its attached photo will be hidden from the active task activity log and can be restored at any time from the Recycle Bin.</small>`,
+      iconType: 'danger',
+      okText: 'Move to Trash',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        comment.isDeleted = true;
+        comment.deletedAt = new Date().toISOString();
+        comment.deletedBy = getCurrentUserLabel();
+
+        // If the task's active proofImage came from this comment, clear or recompute it
+        if (comment.proofImage && (task.proofImage === comment.proofImage || !task.proofImage)) {
+          const remainingProof = (task.comments || [])
+            .filter(c => c.id !== commentId && !c.isDeleted && c.proofImage)
+            .reverse()[0]?.proofImage || null;
+          task.proofImage = remainingProof;
+        }
+        if (comment.remarks && task.completionRemarks === comment.remarks) {
+          const remainingRemarks = (task.comments || [])
+            .filter(c => c.id !== commentId && !c.isDeleted && c.remarks)
+            .reverse()[0]?.remarks || '';
+          task.completionRemarks = remainingRemarks;
+        }
+
+        saveState();
+        syncTaskToCloud(task);
+
+        if (state.activeDrawerTaskId === taskId) {
+          switchDrawerTab(state.drawerActiveTab || 'all');
+        }
+        render();
+        updateKPIsAndHeader();
+        if (el.recycleBinModal && el.recycleBinModal.classList.contains('open')) {
+          renderRecycleBinModal();
+        }
+        showToast('Remark and uploaded image moved to Recycle Bin.');
+      }
+    });
+  }
+
+  function deletePhotoFromTask(taskId, commentId, encodedPhotoSrc) {
+    if (!isAdmin()) return;
+    const task = state.tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const photoSrc = encodedPhotoSrc ? decodeURIComponent(encodedPhotoSrc) : null;
+
+    showConfirmModal({
+      title: 'Delete Uploaded Photo?',
+      message: `Are you sure you want to delete this uploaded evidence photo from <strong>"${escapeHTML(task.assetName)}"</strong>?<br><br><small style="color: #DC2626;">The photo will be permanently deleted and removed from this asset across both Admin and Store accounts.</small>`,
+      iconType: 'danger',
+      okText: 'Delete Photo',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        let modified = false;
+
+        // 1. Remove from comment if commentId specified
+        if (commentId && task.comments) {
+          const comment = task.comments.find(c => c.id === commentId);
+          if (comment && comment.proofImage) {
+            comment.proofImage = null;
+            comment.editedAt = new Date().toISOString();
+            comment.editedBy = getCurrentUserLabel();
+            modified = true;
+          }
+        }
+
+        // 2. Remove from any comment matching photoSrc
+        if (photoSrc && task.comments) {
+          task.comments.forEach(c => {
+            if (c.proofImage === photoSrc) {
+              c.proofImage = null;
+              c.editedAt = new Date().toISOString();
+              c.editedBy = getCurrentUserLabel();
+              modified = true;
+            }
+          });
+        }
+
+        // 3. Recompute or clear task.proofImage
+        if (!photoSrc || task.proofImage === photoSrc || commentId) {
+          const remainingProof = (task.comments || [])
+            .filter(c => !c.isDeleted && c.proofImage && (!photoSrc || c.proofImage !== photoSrc))
+            .reverse()[0]?.proofImage || null;
+          task.proofImage = remainingProof;
+          modified = true;
+        }
+
+        if (modified) {
+          saveState();
+          syncTaskToCloud(task);
+
+          // Cross-notify the store account
+          sendAppNotification({
+            target: task.store,
+            type: 'remark_updated',
+            title: 'Evidence Photo Removed',
+            message: `Admin removed an uploaded photo on task "${task.assetName}".`,
+            taskId: task.id,
+            sender: 'Admin (Headquarters)'
+          });
+
+          if (state.activeDrawerTaskId === taskId) {
+            switchDrawerTab(state.drawerActiveTab || 'photos');
+          }
+          render();
+          showToast(`Uploaded photo deleted and synced to ${task.store} account.`);
+        }
+      }
+    });
+  }
+
   function restoreAllDeletedTasks() {
     if (!isAdmin()) return;
+    const currentTab = state.recycleBinTab || 'tasks';
+
+    if (currentTab === 'comments') {
+      let restoredCount = 0;
+      state.tasks.forEach(task => {
+        let taskChanged = false;
+        (task.comments || []).forEach(c => {
+          if (c.isDeleted) {
+            c.isDeleted = false;
+            delete c.deletedAt;
+            delete c.deletedBy;
+            taskChanged = true;
+            restoredCount++;
+          }
+        });
+        if (taskChanged) {
+          syncTaskToCloud(task);
+        }
+      });
+      if (restoredCount === 0) return;
+      saveState();
+      render();
+      if (state.activeDrawerTaskId) {
+        const activeT = state.tasks.find(t => t.id === state.activeDrawerTaskId);
+        if (activeT) renderActivityDrawer(activeT);
+      }
+      renderRecycleBinModal();
+      showToast(`Restored all ${restoredCount} remark(s) to active timelines.`);
+      return;
+    }
+
     const deletedTasks = state.tasks.filter(t => t.isDeleted);
     if (deletedTasks.length === 0) return;
 
@@ -2820,12 +3181,52 @@
 
   function emptyRecycleBin() {
     if (!isAdmin()) return;
+    const currentTab = state.recycleBinTab || 'tasks';
+
+    if (currentTab === 'comments') {
+      let commentCount = 0;
+      state.tasks.forEach(t => {
+        (t.comments || []).forEach(c => {
+          if (c.isDeleted) commentCount++;
+        });
+      });
+      if (commentCount === 0) return;
+
+      showConfirmModal({
+        title: 'Empty Deleted Remarks?',
+        message: `Are you sure you want to permanently delete all <strong>${commentCount}</strong> remark(s) in the Recycle Bin?<br><br><small style="color: #DC2626;">This cannot be undone. All deleted remarks will be purged forever.</small>`,
+        iconType: 'danger',
+        okText: 'Empty Remarks',
+        okClass: 'btn-danger',
+        onConfirm: () => {
+          state.tasks.forEach(task => {
+            if (task.comments && task.comments.length) {
+              const beforeLen = task.comments.length;
+              task.comments = task.comments.filter(c => !c.isDeleted);
+              if (task.comments.length !== beforeLen) {
+                syncTaskToCloud(task);
+              }
+            }
+          });
+          saveState();
+          render();
+          if (state.activeDrawerTaskId) {
+            const activeT = state.tasks.find(t => t.id === state.activeDrawerTaskId);
+            if (activeT) renderActivityDrawer(activeT);
+          }
+          renderRecycleBinModal();
+          showToast(`Recycle Bin remarks emptied (${commentCount} permanently erased).`);
+        }
+      });
+      return;
+    }
+
     const count = state.tasks.filter(t => t.isDeleted).length;
     if (count === 0) return;
 
     showConfirmModal({
-      title: 'Empty Recycle Bin?',
-      message: `Are you sure you want to permanently delete all <strong>${count}</strong> item(s) in the Recycle Bin?<br><br><small style="color: #DC2626;">This cannot be undone. All deleted tasks will be purged from the database forever.</small>`,
+      title: 'Empty Recycle Bin Tasks?',
+      message: `Are you sure you want to permanently delete all <strong>${count}</strong> task(s) in the Recycle Bin?<br><br><small style="color: #DC2626;">This cannot be undone. All deleted tasks will be purged from the database forever.</small>`,
       iconType: 'danger',
       okText: 'Empty Bin',
       okClass: 'btn-danger',
@@ -3400,7 +3801,7 @@
     const allPhotos = [];
     if (task.comments && task.comments.length) {
       task.comments.forEach(c => {
-        if (c.proofImage) {
+        if (!c.isDeleted && c.proofImage) {
           allPhotos.push({
             src: c.proofImage,
             date: c.completionDate || c.timestamp || 'Recent',
@@ -3577,7 +3978,7 @@
   // Render Connected Activity Timeline Stream
   function renderTimelineStream(task, mode = 'all') {
     if (!el.commentsList) return;
-    const allComments = task.comments || [];
+    const allComments = (task.comments || []).filter(c => !c.isDeleted);
     let displayComments = allComments;
 
     if (mode === 'remarks') {
@@ -3651,6 +4052,13 @@
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                       </svg>
                       <span>Edit</span>
+                    </button>
+                    <button type="button" class="btn-delete-comment" onclick="window.assetApp.deleteCommentToRecycleBin('${task.id}', '${c.id}')" title="Move remark to Recycle Bin (Admin)">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                      <span>Delete</span>
                     </button>
                   ` : ''}
                 </div>
@@ -3744,6 +4152,13 @@
                     </svg>
                     <span>Edit</span>
                   </button>
+                  <button type="button" class="btn-delete-comment" onclick="window.assetApp.deleteCommentToRecycleBin('${task.id}', '${c.id}')" title="Move comment to Recycle Bin (Admin)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    <span>Delete</span>
+                  </button>
                 ` : ''}
               </div>
             </div>
@@ -3812,10 +4227,15 @@
             <span>📅 ${formatDateDisplay(p.date)}</span>
           </div>
           ${p.remarks ? `<div class="photo-proof-remarks">"${escapeHTML(p.remarks)}"</div>` : ''}
-          ${isAdmin() && p.commentId ? `
-            <div style="margin-top: 8px; display: flex; justify-content: flex-end;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditCommentModal('${task.id}', '${p.commentId}')" style="font-size: 11px; padding: 2px 8px;">
-                ✏️ Replace Photo / Edit
+          ${isAdmin() ? `
+            <div style="margin-top: 8px; display: flex; justify-content: flex-end; gap: 6px; flex-wrap: wrap;">
+              ${p.commentId ? `
+                <button type="button" class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditCommentModal('${task.id}', '${p.commentId}')" style="font-size: 11px; padding: 2px 8px;">
+                  ✏️ Replace Photo / Edit
+                </button>
+              ` : ''}
+              <button type="button" class="btn btn-danger-ghost btn-sm" onclick="window.assetApp.deletePhotoFromTask('${task.id}', '${p.commentId || ''}', '${encodeURIComponent(p.src)}')" style="font-size: 11px; padding: 2px 8px;" title="Delete this uploaded photo">
+                🗑️ Delete Photo
               </button>
             </div>
           ` : ''}
@@ -4173,12 +4593,15 @@
       comment.text = `✅ Maintenance Completed\nTask Scheduled Date: ${formatDateDisplay(schedDate)}\nCompleted on: ${formatDateDisplay(compDate)} by ${comment.author || 'Staff'}\nNext Cycle Date: ${nextDate ? formatDateDisplay(nextDate) : 'None'}\nRemarks: ${newText}`;
 
       if (task.proofImage === oldImage || !task.proofImage) {
-        task.proofImage = newImage;
+        task.proofImage = newImage || (task.comments || []).filter(c => c.id !== commentId && !c.isDeleted && c.proofImage).reverse()[0]?.proofImage || null;
       }
       task.completionRemarks = newText;
     } else {
       comment.text = newText;
       comment.proofImage = newImage;
+      if (oldImage && task.proofImage === oldImage) {
+        task.proofImage = newImage || (task.comments || []).filter(c => c.id !== commentId && !c.isDeleted && c.proofImage).reverse()[0]?.proofImage || null;
+      }
     }
 
     saveState();
@@ -4421,6 +4844,8 @@
     if (el.btnRecycleBinDone) el.btnRecycleBinDone.addEventListener('click', closeRecycleBinModal);
     if (el.btnRestoreAllTrash) el.btnRestoreAllTrash.addEventListener('click', restoreAllDeletedTasks);
     if (el.btnEmptyTrash) el.btnEmptyTrash.addEventListener('click', emptyRecycleBin);
+    if (el.tabTrashTasks) el.tabTrashTasks.addEventListener('click', () => switchRecycleBinTab('tasks'));
+    if (el.tabTrashComments) el.tabTrashComments.addEventListener('click', () => switchRecycleBinTab('comments'));
     if (el.recycleBinModal) {
       el.recycleBinModal.addEventListener('click', (e) => {
         if (e.target === el.recycleBinModal) closeRecycleBinModal();
@@ -4970,6 +5395,11 @@
     restoreAllDeletedTasks: restoreAllDeletedTasks,
     permanentlyDeleteTask: permanentlyDeleteTask,
     emptyRecycleBin: emptyRecycleBin,
+    deleteCommentToRecycleBin: deleteCommentToRecycleBin,
+    restoreComment: restoreComment,
+    permanentlyDeleteComment: permanentlyDeleteComment,
+    deletePhotoFromTask: deletePhotoFromTask,
+    switchRecycleBinTab: switchRecycleBinTab,
     openEditCommentModal: openEditCommentModal,
     closeEditCommentModal: closeEditCommentModal,
     updateTaskCondition: updateTaskCondition,

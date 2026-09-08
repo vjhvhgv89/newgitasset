@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3.6">
+  <link rel="stylesheet" href="style.css?v=3.7">
 </head>
 <body>
   
@@ -545,18 +545,32 @@
           <div>
             <div class="drawer-pretitle" style="color: #DC2626;">Trash Recovery & Safety Vault</div>
             <h2 id="recycle-bin-title" class="modal-heading">Recycle Bin</h2>
-            <p class="modal-subheading">Review deleted equipment tasks. Restoring a task immediately returns it to active schedules across admin and store accounts.</p>
+            <p class="modal-subheading">Review deleted equipment tasks and remarks. Restoring an item immediately returns it to active schedules across admin and store accounts.</p>
           </div>
           <button type="button" class="btn-close" id="btn-recycle-bin-close" aria-label="Close dialog">&times;</button>
         </div>
 
         <div class="modal-body">
           <div class="recycle-bin-toolbar">
-            <div class="recycle-bin-stats">
-              <span id="recycle-bin-count-badge" class="badge-trash-count">0 deleted tasks</span>
+            <div class="recycle-bin-tabs">
+              <button type="button" class="recycle-bin-tab-btn active" id="tab-trash-tasks" data-trash-tab="tasks">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 11l3 3L22 4"></path>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+                <span>Deleted Tasks</span>
+                <span id="trash-tasks-count" class="badge-trash-pill">0</span>
+              </button>
+              <button type="button" class="recycle-bin-tab-btn" id="tab-trash-comments" data-trash-tab="comments">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Deleted Remarks</span>
+                <span id="trash-comments-count" class="badge-trash-pill">0</span>
+              </button>
             </div>
             <div class="recycle-bin-actions-top">
-              <button type="button" id="btn-restore-all-trash" class="btn btn-secondary btn-sm" title="Restore all deleted tasks">
+              <button type="button" id="btn-restore-all-trash" class="btn btn-secondary btn-sm" title="Restore all deleted items">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="1 4 1 10 7 10"></polyline>
                   <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
@@ -573,10 +587,10 @@
             </div>
           </div>
 
-          <!-- Deleted Tasks Table / Container -->
+          <!-- Deleted Table / Container -->
           <div class="recycle-bin-table-wrapper">
             <table class="task-table">
-              <thead>
+              <thead id="recycle-bin-thead">
                 <tr>
                   <th>Asset Name</th>
                   <th>Store Branch</th>
@@ -1253,6 +1267,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-  <script src="app.js?v=3.2"></script>
+  <script src="app.js?v=3.3"></script>
 </body>
 </html>

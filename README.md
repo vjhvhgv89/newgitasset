@@ -24,11 +24,12 @@ A simple, user-friendly, responsive asset and task operations management system 
     - **Next Cycle Date**: The calculated next maintenance cycle schedule.
   - Recurring tasks automatically advance to the next cycle date so maintenance remains in the active operational pipeline.
 - **View Modes**: Sortable Table View and Monthly Calendar View (showing all due dates and next cycle maintenance dates).
-- **Recycle Bin (Trash Recovery & Safety Vault)**:
-  - **Admin-Only Visibility**: Deleted tasks are safely moved to the Recycle Bin rather than permanently erased immediately.
-  - **Real-Time Store Sync & Restore**: When an Admin restores a task from the Recycle Bin, real-time cloud synchronization immediately restores the task back into the assigned Store Account's active workspace and calendar.
-  - **Bulk Actions**: Support for 1-click "Restore All" or "Empty Recycle Bin" (permanent purge).
-- **Activity Log & Remarks**: Slide-in comment history drawer with role badges, edit controls, and photo evidence viewer with replacement capabilities.
+- **Recycle Bin (Trash Recovery & Safety Vault for Tasks & Remarks)**:
+  - **Dual Trash Tabs**: Admin can toggle between **Deleted Tasks** and **Deleted Remarks & Comments**.
+  - **Admin Comment Deletion**: Admins can delete any remark or store verification note from the activity timeline with a `[🗑️ Delete]` button, safely moving it into the Recycle Bin.
+  - **Real-Time Store Sync & Restore**: Restoring a task or remark immediately restores it to active timelines, calendars, and store views in real-time via Firestore.
+  - **Bulk Actions**: Support for 1-click "Restore All" or "Empty Recycle Bin" (permanent purge) per category.
+- **Activity Log & Remarks**: Slide-in comment history drawer with role badges, edit controls, delete-to-trash controls, and photo evidence viewer with replacement capabilities.
 
 ## Running Locally
 - **Option 1 (1-Click)**: Double-click [go_live.bat](file:///f:/One%20drive%20personal/OneDrive/Desktop/newgitasset/go_live.bat).
