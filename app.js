@@ -389,13 +389,13 @@
       snapshot.forEach(doc => {
         const t = doc.data();
         const docData = doc.data();
-        const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))))));
+        const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))))));
 
         if (t.status === 'Completed' || hasVerification) {
           const wasNotCompletedInDoc = docData.status !== 'Completed';
           t.status = 'Completed';
           if (!t.completedAt && t.comments) {
-            const verif = [...t.comments].reverse().find(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))));
+            const verif = [...t.comments].reverse().find(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))));
             if (verif) {
               t.completedAt = verif.completionDate || (verif.timestamp ? verif.timestamp.split('T')[0] : TODAY_STR);
               if (!t.completedBy && verif.author) {
@@ -553,13 +553,13 @@
     }
 
     state.tasks.forEach(t => {
-      const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))))));
+      const hasVerification = Boolean(t.completedAt || (t.comments && t.comments.some(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))))));
 
       if (t.status === 'Completed' || t.completedAt || hasVerification) {
         const wasNotCompleted = t.status !== 'Completed';
         t.status = 'Completed';
         if (!t.completedAt && t.comments) {
-          const verif = [...t.comments].reverse().find(c => c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on'))));
+          const verif = [...t.comments].reverse().find(c => !c.isDeleted && (c.isVerification || (c.text && (c.text.includes('Task Completed') || c.text.includes('Task Completed on')))));
           if (verif) {
             t.completedAt = verif.completionDate || (verif.timestamp ? verif.timestamp.split('T')[0] : TODAY_STR);
             if (!t.completedBy && verif.author) {
@@ -1180,7 +1180,7 @@
 
     const rows = tasks.map(t => {
       const isComplete = t.status === 'Completed' || Boolean(t.completedAt);
-      const commentsCount = (t.comments && t.comments.length) || 0;
+      const commentsCount = (t.comments && t.comments.filter(c => !c.isDeleted).length) || 0;
       const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => !c.isDeleted && c.proofImage)?.proofImage) || '';
 
       return [
@@ -1252,7 +1252,8 @@
       const isComplete = t.status === 'Completed' || Boolean(t.completedAt);
       const latestPhoto = t.proofImage || (t.comments && [...t.comments].reverse().find(c => !c.isDeleted && c.proofImage)?.proofImage) || '';
       const performer = t.completedBy || (isComplete ? 'Store Staff' : '—');
-      const remarks = t.completionRemarks || (t.comments && t.comments.length ? t.comments[t.comments.length - 1].text : '—');
+      const activeComments = (t.comments || []).filter(c => !c.isDeleted);
+      const remarks = t.completionRemarks || (activeComments.length ? activeComments[activeComments.length - 1].text : '—');
 
       return `
         <tr>
@@ -1743,7 +1744,7 @@
       const status = getTaskDisplayStatus(task);
       const meta = getStatusMeta(status);
       const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-      const commentCount = (task.comments && task.comments.length) || 0;
+      const commentCount = (task.comments && task.comments.filter(c => !c.isDeleted).length) || 0;
       const condClass = getConditionClass(task.condition);
 
       const hasProof = Boolean(task.proofImage || (task.comments && task.comments.some(c => !c.isDeleted && c.proofImage)));
@@ -1950,7 +1951,7 @@
       const status = getTaskDisplayStatus(task);
       const meta = getStatusMeta(status);
       const isComplete = (task.status === 'Completed' || Boolean(task.completedAt));
-      const commentCount = (task.comments && task.comments.length) || 0;
+      const commentCount = (task.comments && task.comments.filter(c => !c.isDeleted).length) || 0;
       const condClass = getConditionClass(task.condition);
 
       const targetDueDate = (isComplete && (task.nextCycleDueDate || calculateNextCycleDate(task.dueDate || TODAY_STR, task.cycle)))
@@ -2379,6 +2380,11 @@
     }
 
     renderNotifications();
+
+    if (el.commentsDrawer && el.commentsDrawer.classList.contains('open') && state.activeDrawerTaskId) {
+      const activeT = state.tasks.find(t => t.id === state.activeDrawerTaskId);
+      if (activeT) updateDrawerBadges(activeT);
+    }
   }
 
   // Login handler
@@ -3124,8 +3130,7 @@
       saveState();
       render();
       if (state.activeDrawerTaskId) {
-        const activeT = state.tasks.find(t => t.id === state.activeDrawerTaskId);
-        if (activeT) renderActivityDrawer(activeT);
+        switchDrawerTab(state.drawerActiveTab || 'all');
       }
       renderRecycleBinModal();
       showToast(`Restored all ${restoredCount} remark(s) to active timelines.`);
@@ -3211,8 +3216,7 @@
           saveState();
           render();
           if (state.activeDrawerTaskId) {
-            const activeT = state.tasks.find(t => t.id === state.activeDrawerTaskId);
-            if (activeT) renderActivityDrawer(activeT);
+            switchDrawerTab(state.drawerActiveTab || 'all');
           }
           renderRecycleBinModal();
           showToast(`Recycle Bin remarks emptied (${commentCount} permanently erased).`);
@@ -3825,6 +3829,18 @@
     return allPhotos;
   }
 
+  // Helper: Update Drawer Tab Badges (active / non-deleted items only)
+  function updateDrawerBadges(task) {
+    if (!task) return;
+    const allPhotos = getTimelinePhotos(task);
+    const activeComments = (task.comments || []).filter(c => !c.isDeleted);
+    const remarksOnly = activeComments.filter(c => !isTimelineSystemEvent(c));
+
+    if (el.tabAllCount) el.tabAllCount.textContent = activeComments.length;
+    if (el.tabPhotosCount) el.tabPhotosCount.textContent = allPhotos.length;
+    if (el.tabRemarksCount) el.tabRemarksCount.textContent = remarksOnly.length;
+  }
+
   // Helper: Parse structured details from a timeline comment
   function parseTimelineComment(c, task) {
     if (!c) return { isSys: true, text: '', timestamp: '' };
@@ -3963,6 +3979,8 @@
 
     const task = state.tasks.find(t => t.id === state.activeDrawerTaskId);
     if (!task) return;
+
+    updateDrawerBadges(task);
 
     if (tabName === 'photos') {
       if (el.drawerViewTimeline) el.drawerViewTimeline.classList.add('hidden');
@@ -4290,13 +4308,7 @@
     }
 
     // Collect Photos & Comments for tab badges
-    const allPhotos = getTimelinePhotos(task);
-    const allComments = task.comments || [];
-    const remarksOnly = allComments.filter(c => !isTimelineSystemEvent(c));
-
-    if (el.tabAllCount) el.tabAllCount.textContent = allComments.length;
-    if (el.tabPhotosCount) el.tabPhotosCount.textContent = allPhotos.length;
-    if (el.tabRemarksCount) el.tabRemarksCount.textContent = remarksOnly.length;
+    updateDrawerBadges(task);
 
     // Render Quick Action Chips & Posting Author
     renderDrawerQuickChips();
@@ -4661,11 +4673,7 @@
     });
 
     // Update tab badges & refresh active view
-    const allPhotos = getTimelinePhotos(task);
-    const remarksOnly = (task.comments || []).filter(c => !isTimelineSystemEvent(c));
-    if (el.tabAllCount) el.tabAllCount.textContent = task.comments.length;
-    if (el.tabPhotosCount) el.tabPhotosCount.textContent = allPhotos.length;
-    if (el.tabRemarksCount) el.tabRemarksCount.textContent = remarksOnly.length;
+    updateDrawerBadges(task);
 
     switchDrawerTab(state.drawerActiveTab || 'all');
     render();
