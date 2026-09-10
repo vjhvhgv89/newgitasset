@@ -14,9 +14,67 @@
 (function () {
   'use strict';
 
-  // Reference Date: August 24, 2026
-  const TODAY_STR = '2026-08-24';
-  const TODAY = new Date(TODAY_STR + 'T00:00:00');
+  // Dynamic Real-Time System Date & Time Engine
+  function getSystemDate() {
+    return new Date();
+  }
+
+  function getTodayStr() {
+    const d = getSystemDate();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function getTodayDate() {
+    return new Date(getTodayStr() + 'T00:00:00');
+  }
+
+  let TODAY_STR = getTodayStr();
+  let TODAY = getTodayDate();
+  let realtimeClockInterval = null;
+
+  function updateRealtimeClockDisplay() {
+    const now = getSystemDate();
+    const currentTodayStr = getTodayStr();
+
+    // Check if the calendar day rolled over (e.g. at midnight)
+    if (currentTodayStr !== TODAY_STR) {
+      TODAY_STR = currentTodayStr;
+      TODAY = getTodayDate();
+
+      if (typeof state !== 'undefined' && state && state.tasks) {
+        state.tasks.forEach(t => {
+          if (!t.completedAt) {
+            t.status = calculateTaskStatus(t);
+          }
+        });
+        if (typeof render === 'function') render();
+      }
+    }
+
+    if (typeof el !== 'undefined' && el && el.currentDateDisplay) {
+      const datePart = now.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+      const timePart = now.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      el.currentDateDisplay.innerHTML = `${datePart} <span class="live-time-ticker">• ${timePart}</span>`;
+    }
+  }
+
+  function startRealtimeSystemClock() {
+    updateRealtimeClockDisplay();
+    if (realtimeClockInterval) clearInterval(realtimeClockInterval);
+    realtimeClockInterval = setInterval(updateRealtimeClockDisplay, 1000);
+  }
 
   // Firebase Configuration
   const firebaseConfig = {
@@ -124,6 +182,7 @@
     // Completion Modal State
     completingTaskId: null,
     completionAttachedImageData: null,
+    completionAttachedImages: [],
 
     // Admin Edit Comment State
     editingCommentTaskId: null,
@@ -769,6 +828,9 @@
     uploadZonePrompt: document.getElementById('upload-zone-prompt'),
     imagePreviewContainer: document.getElementById('image-preview-container'),
     imagePreviewImg: document.getElementById('image-preview-img'),
+    imagePreviewGrid: document.getElementById('image-preview-grid'),
+    multiPreviewCount: document.getElementById('multi-preview-count'),
+    btnAddMorePhotos: document.getElementById('btn-add-more-photos'),
     btnRemoveImage: document.getElementById('btn-remove-image'),
 
     // Modal: Create / Edit
@@ -1911,14 +1973,14 @@
                     Done (${formatDateDisplay(task.completedAt)})
                   </span>
                 ` : ''}
-              ` : !isAdmin() ? `
+              ` : `
                 <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Specify completion date, photo proof & remarks">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                   <span>Mark Done</span>
                 </button>
-              ` : ''}
+              `}
 
               ${isAdmin() ? `
                 <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task details (Admin only)">
@@ -2045,6 +2107,7 @@
           <td>
             <div class="table-actions-cell">
               ${isAdmin() ? `
+                <button class="btn btn-success btn-sm" onclick="window.assetApp.triggerTaskCompletion('${task.id}')" title="Complete maintenance cycle with photo proof">Done</button>
                 <button class="btn btn-secondary btn-sm" onclick="window.assetApp.openEditModal('${task.id}')" title="Edit task details (Admin)">Edit</button>
                 <button class="btn btn-danger btn-sm btn-icon-only" onclick="window.assetApp.deleteTask('${task.id}')" title="Move task to Recycle Bin (Admin)">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -3424,6 +3487,7 @@
   function openCompletionModal(task) {
     state.completingTaskId = task.id;
     state.completionAttachedImageData = null;
+    state.completionAttachedImages = [];
 
     el.completionForm.reset();
     syncConditionOptions();
@@ -3440,15 +3504,16 @@
     el.completionStatusPill.textContent = meta.label;
     el.completionStatusPill.className = `status-chip ${meta.className}`;
 
-    el.imagePreviewContainer.classList.add('hidden');
-    el.uploadZonePrompt.classList.remove('hidden');
-    el.imagePreviewImg.src = '';
-    if (el.completionStaffName) el.completionStaffName.value = '';
+    renderCompletionPreviews();
+
+    if (el.completionStaffName) {
+      el.completionStaffName.value = isAdmin() ? 'Admin (Headquarters)' : '';
+    }
     el.completionRemarksInput.value = '';
 
     el.completionModal.classList.add('open');
     el.completionModal.setAttribute('aria-hidden', 'false');
-    if (el.completionStaffName) {
+    if (el.completionStaffName && !isAdmin()) {
       el.completionStaffName.focus();
     } else {
       el.completionRemarksInput.focus();
@@ -3460,6 +3525,8 @@
     el.completionModal.setAttribute('aria-hidden', 'true');
     state.completingTaskId = null;
     state.completionAttachedImageData = null;
+    state.completionAttachedImages = [];
+    renderCompletionPreviews();
   }
 
   function compressImage(file, maxDimension = 900, quality = 0.72) {
@@ -3497,46 +3564,91 @@
     });
   }
 
-  async function handleImageFileUpload(file) {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file (PNG, JPEG, WebP).');
-      return;
-    }
+  async function handleImageFileUpload(files) {
+    if (!files) return;
+    const fileList = (files instanceof FileList || Array.isArray(files)) ? Array.from(files) : [files];
+    if (fileList.length === 0) return;
 
-    try {
-      const compressedDataUrl = await compressImage(file);
-      if (compressedDataUrl) {
-        setAttachedCompletionImage(compressedDataUrl);
+    for (const file of fileList) {
+      if (!file.type || !file.type.startsWith('image/')) {
+        alert(`File "${file.name || 'Selected file'}" is not an image (PNG, JPEG, WebP).`);
+        continue;
       }
-    } catch (err) {
-      console.warn('Compression note:', err);
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        setAttachedCompletionImage(e.target.result);
-      };
-      reader.readAsDataURL(file);
+
+      try {
+        const compressedDataUrl = await compressImage(file);
+        if (compressedDataUrl) {
+          addAttachedCompletionImage(compressedDataUrl);
+        }
+      } catch (err) {
+        console.warn('Compression note:', err);
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          addAttachedCompletionImage(e.target.result);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   }
 
-  function setAttachedCompletionImage(dataUrl) {
-    state.completionAttachedImageData = dataUrl;
-    el.imagePreviewImg.src = dataUrl;
-    el.uploadZonePrompt.classList.add('hidden');
-    el.imagePreviewContainer.classList.remove('hidden');
+  function addAttachedCompletionImage(dataUrl) {
+    if (!dataUrl) return;
+    if (!state.completionAttachedImages) state.completionAttachedImages = [];
+    state.completionAttachedImages.push(dataUrl);
+    state.completionAttachedImageData = state.completionAttachedImages[0] || null;
+    renderCompletionPreviews();
+  }
+
+  function removeCompletionImage(index) {
+    if (!state.completionAttachedImages) return;
+    state.completionAttachedImages.splice(index, 1);
+    state.completionAttachedImageData = state.completionAttachedImages[0] || null;
+    renderCompletionPreviews();
   }
 
   function removeAttachedCompletionImage() {
+    state.completionAttachedImages = [];
     state.completionAttachedImageData = null;
-    el.imagePreviewImg.src = '';
-    el.imagePreviewContainer.classList.add('hidden');
-    el.uploadZonePrompt.classList.remove('hidden');
-    el.completionImageFile.value = '';
+    if (el.completionImageFile) el.completionImageFile.value = '';
+    renderCompletionPreviews();
+  }
+
+  function renderCompletionPreviews() {
+    const images = state.completionAttachedImages || [];
+    if (!el.imagePreviewContainer || !el.uploadZonePrompt) return;
+
+    if (images.length === 0) {
+      el.imagePreviewContainer.classList.add('hidden');
+      el.uploadZonePrompt.classList.remove('hidden');
+      if (el.imagePreviewImg) el.imagePreviewImg.src = '';
+      return;
+    }
+
+    el.uploadZonePrompt.classList.add('hidden');
+    el.imagePreviewContainer.classList.remove('hidden');
+
+    if (el.multiPreviewCount) {
+      el.multiPreviewCount.textContent = `${images.length} ${images.length === 1 ? 'photo' : 'photos'} attached`;
+    }
+
+    if (el.imagePreviewGrid) {
+      el.imagePreviewGrid.innerHTML = images.map((src, idx) => `
+        <div class="preview-thumb-card" title="Attached photo #${idx + 1}">
+          <img src="${src}" alt="Proof thumbnail #${idx + 1}" class="preview-thumb-img">
+          <span class="preview-thumb-index">#${idx + 1}</span>
+          <button type="button" class="btn-remove-thumb" onclick="window.assetApp.removeCompletionImage(${idx})" title="Remove this photo">
+            ×
+          </button>
+        </div>
+      `).join('');
+    }
+
+    if (el.imagePreviewImg) el.imagePreviewImg.src = images[0] || '';
   }
 
   function useSamplePhoto(sampleKey) {
     if (SAMPLE_PHOTOS[sampleKey]) {
-      setAttachedCompletionImage(SAMPLE_PHOTOS[sampleKey]);
+      addAttachedCompletionImage(SAMPLE_PHOTOS[sampleKey]);
       showToast('Attached verification sample image');
     }
   }
@@ -3568,15 +3680,19 @@
       return;
     }
 
-    if (!state.completionAttachedImageData) {
-      alert('Proof image is required before completing this task. Please attach or drop an image.');
+    const attachedPhotos = (state.completionAttachedImages && state.completionAttachedImages.length)
+      ? state.completionAttachedImages
+      : (state.completionAttachedImageData ? [state.completionAttachedImageData] : []);
+
+    if (attachedPhotos.length === 0) {
+      alert('Proof image is required before completing this task. Please attach or drop at least one equipment photo.');
       return;
     }
 
     const scheduledDate = task.dueDate || TODAY_STR;
     const condition = el.completionConditionSelect.value;
     const nowIso = new Date().toISOString();
-    const proofUrl = state.completionAttachedImageData;
+    const proofUrl = attachedPhotos[0];
 
     // 1. Compute Next Maintenance Cycle due date from the scheduled date being completed
     const baseScheduledDate = task.dueDate || completionDate;
@@ -3604,6 +3720,7 @@
       nextCycleDueDate: nextDate || null,
       nextScheduleText: nextStatusText ? nextStatusText.trim() : '',
       proofImage: proofUrl,
+      proofImages: attachedPhotos,
       timestamp: nowIso,
       isVerification: true
     });
@@ -3623,6 +3740,7 @@
     task.condition = condition;
     task.completionRemarks = remarks;
     task.proofImage = proofUrl;
+    task.proofImages = attachedPhotos;
 
     saveState();
     syncTaskToCloud(task);
@@ -3818,27 +3936,40 @@
     const allPhotos = [];
     if (task.comments && task.comments.length) {
       task.comments.forEach(c => {
-        if (!c.isDeleted && c.proofImage) {
-          allPhotos.push({
-            src: c.proofImage,
-            date: c.completionDate || c.timestamp || 'Recent',
-            author: c.author || 'Store Inspector',
-            remarks: c.remarks || (c.text && !c.text.startsWith('✅ Maintenance Completed') && !c.text.startsWith('Task Completed on') ? c.text : ''),
-            timestamp: c.timestamp,
-            commentId: c.id
+        if (!c.isDeleted) {
+          const imgs = (Array.isArray(c.proofImages) && c.proofImages.length)
+            ? c.proofImages
+            : (c.proofImage ? [c.proofImage] : []);
+          imgs.forEach((imgSrc, imgIdx) => {
+            if (!allPhotos.some(p => p.src === imgSrc && p.commentId === c.id)) {
+              allPhotos.push({
+                src: imgSrc,
+                date: c.completionDate || c.timestamp || 'Recent',
+                author: c.author || 'Store Inspector',
+                remarks: c.remarks || (c.text && !c.text.startsWith('✅ Maintenance Completed') && !c.text.startsWith('Task Completed on') ? c.text : ''),
+                timestamp: c.timestamp,
+                commentId: c.id,
+                photoIndex: imgIdx
+              });
+            }
           });
         }
       });
     }
-    if (task.proofImage && !allPhotos.some(p => p.src === task.proofImage)) {
-      allPhotos.unshift({
-        src: task.proofImage,
-        date: task.completedAt || task.completedTimestamp || 'Latest Cycle',
-        author: task.completedBy || 'Store Inspector',
-        remarks: task.completionRemarks || '',
-        timestamp: task.completedAt || ''
-      });
-    }
+    const taskPhotos = (Array.isArray(task.proofImages) && task.proofImages.length)
+      ? task.proofImages
+      : (task.proofImage ? [task.proofImage] : []);
+    taskPhotos.forEach(pSrc => {
+      if (!allPhotos.some(p => p.src === pSrc)) {
+        allPhotos.unshift({
+          src: pSrc,
+          date: task.completedAt || task.completedTimestamp || 'Latest Cycle',
+          author: task.completedBy || 'Store Inspector',
+          remarks: task.completionRemarks || '',
+          timestamp: task.completedAt || ''
+        });
+      }
+    });
     return allPhotos;
   }
 
@@ -3907,6 +4038,10 @@
       remarks = task.completionRemarks;
     }
 
+    const photos = (Array.isArray(c.proofImages) && c.proofImages.length)
+      ? c.proofImages
+      : (c.proofImage ? [c.proofImage] : []);
+
     return {
       isSys: false,
       isVerification: true,
@@ -3916,7 +4051,8 @@
       completionDate: completionDate,
       nextCycleDateStr: nextCycleDateStr || c.nextScheduleText || '',
       remarks: remarks,
-      proofImage: c.proofImage || null,
+      proofImage: c.proofImage || (photos[0] || null),
+      proofImages: photos,
       timestamp: c.timestamp,
       editedAt: c.editedAt,
       editedBy: c.editedBy
@@ -4127,7 +4263,16 @@
               ` : ''}
 
               <!-- Photo Proof Attached Preview -->
-              ${photoUrl ? `
+              ${parsed.proofImages && parsed.proofImages.length > 1 ? `
+                <div class="timeline-proof-gallery">
+                  ${parsed.proofImages.map((pUrl, pIdx) => `
+                    <div class="timeline-gallery-item" onclick="window.assetApp.openLightbox('${pUrl}', '${escapeHTML(task.assetName)} — Verified Photo #${pIdx + 1} (${compDateStr})')" title="Click to view full image">
+                      <img src="${pUrl}" alt="Photo #${pIdx + 1}" class="timeline-gallery-img">
+                      <span class="timeline-gallery-badge">Photo #${pIdx + 1}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : photoUrl ? `
                 <div class="timeline-proof-preview" onclick="window.assetApp.openLightbox('${photoUrl}', '${escapeHTML(task.assetName)} — Verified Photo Proof (${compDateStr})')">
                   <img src="${photoUrl}" alt="Verified Proof Thumbnail" class="timeline-proof-thumb">
                   <div class="timeline-proof-details">
@@ -4194,7 +4339,16 @@
               </div>
             </div>
             <p class="timeline-message">${escapeHTML(parsed.message)}</p>
-            ${parsed.proofImage ? `
+            ${parsed.proofImages && parsed.proofImages.length > 1 ? `
+              <div class="timeline-proof-gallery">
+                ${parsed.proofImages.map((pUrl, pIdx) => `
+                  <div class="timeline-gallery-item" onclick="window.assetApp.openLightbox('${pUrl}', '${escapeHTML(task.assetName)} — Attachment #${pIdx + 1}')" title="Click to view full image">
+                    <img src="${pUrl}" alt="Attachment #${pIdx + 1}" class="timeline-gallery-img">
+                    <span class="timeline-gallery-badge">#${pIdx + 1}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : parsed.proofImage ? `
               <div class="timeline-proof-preview" onclick="window.assetApp.openLightbox('${parsed.proofImage}', '${escapeHTML(task.assetName)} — Photo Attachment')">
                 <img src="${parsed.proofImage}" alt="Attachment Thumbnail" class="timeline-proof-thumb">
                 <div class="timeline-proof-details">
@@ -5121,13 +5275,20 @@
 
     // Image Upload Zone click & drop
     el.imageUploadZone.addEventListener('click', (e) => {
-      if (e.target.closest('#btn-remove-image')) return;
+      if (e.target.closest('#btn-remove-image') || e.target.closest('.btn-remove-thumb') || e.target.closest('.preview-thumb-card')) return;
       el.completionImageFile.click();
     });
 
+    if (el.btnAddMorePhotos) {
+      el.btnAddMorePhotos.addEventListener('click', (e) => {
+        e.stopPropagation();
+        el.completionImageFile.click();
+      });
+    }
+
     el.completionImageFile.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        handleImageFileUpload(e.target.files[0]);
+      if (e.target.files && e.target.files.length) {
+        handleImageFileUpload(e.target.files);
       }
     });
 
@@ -5143,8 +5304,8 @@
     el.imageUploadZone.addEventListener('drop', (e) => {
       e.preventDefault();
       el.imageUploadZone.style.borderColor = '';
-      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-        handleImageFileUpload(e.dataTransfer.files[0]);
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleImageFileUpload(e.dataTransfer.files);
       }
     });
 
@@ -5391,6 +5552,7 @@
     syncConditionOptions();
     bindEvents();
     setupTaskDragAndDrop();
+    startRealtimeSystemClock();
     render();
     setupCloudRealtimeListeners();
   }
@@ -5405,6 +5567,7 @@
     triggerTaskCompletion: triggerTaskCompletion,
     startNextCycleEarly: startNextCycleEarly,
     useSamplePhoto: useSamplePhoto,
+    removeCompletionImage: removeCompletionImage,
     openLightbox: openLightbox,
     updateStoreAccount: updateStoreAccount,
     updateStorePin: updateStorePin,

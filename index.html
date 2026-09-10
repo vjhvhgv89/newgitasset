@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3.7">
+  <link rel="stylesheet" href="style.css?v=3.8">
 </head>
 <body>
   
@@ -307,7 +307,7 @@
                   <line x1="8" y1="2" x2="8" y2="6"></line>
                   <line x1="3" y1="10" x2="21" y2="10"></line>
                 </svg>
-                Today: <strong id="current-date-display">Aug 24, 2026</strong>
+                Today: <strong id="current-date-display">...</strong>
               </span>
             </div>
           </div>
@@ -754,7 +754,7 @@
           <div>
             <div class="drawer-pretitle" style="color: #059669;">Verification Required</div>
             <h2 id="completion-modal-title" class="modal-heading">Complete Task & Submit Proof</h2>
-            <p class="modal-subheading">Store accounts must provide completion remarks and attach a photo before completing this task.</p>
+            <p class="modal-subheading">Provide completion remarks and attach photo evidence before completing this task.</p>
           </div>
           <button type="button" class="btn-close" id="btn-completion-modal-close" aria-label="Close dialog">&times;</button>
         </div>
@@ -808,22 +808,29 @@
               </label>
 
               <div class="image-upload-zone" id="image-upload-zone">
-                <input type="file" id="completion-image-file" accept="image/*" class="file-input-hidden">
+                <input type="file" id="completion-image-file" accept="image/*" class="file-input-hidden" multiple>
                 <div class="upload-zone-prompt" id="upload-zone-prompt">
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
                     <polyline points="21 15 16 10 5 21"></polyline>
                   </svg>
-                  <div class="upload-text-main">Click to browse or drop equipment photo here</div>
-                  <div class="upload-text-sub">JPEG, PNG, WebP up to 10MB</div>
+                  <div class="upload-text-main">Click to browse or drop equipment photos here</div>
+                  <div class="upload-text-sub">Attach one or multiple photos (JPEG, PNG, WebP up to 10MB each)</div>
                 </div>
 
-                <!-- Preview Area -->
+                <!-- Multi-Image Preview Area -->
                 <div id="image-preview-container" class="image-preview-container hidden">
-                  <img id="image-preview-img" src="" alt="Completion photo proof" class="preview-img-element">
-                  <div class="preview-overlay-actions">
-                    <button type="button" id="btn-remove-image" class="btn btn-secondary btn-sm">Change Photo</button>
+                  <div class="multi-preview-header">
+                    <span id="multi-preview-count" class="multi-preview-badge">0 photos attached</span>
+                    <button type="button" id="btn-add-more-photos" class="btn btn-secondary btn-xs">+ Add More</button>
+                  </div>
+                  <div id="image-preview-grid" class="image-preview-grid">
+                    <!-- Dynamically populated thumbnail cards -->
+                  </div>
+                  <img id="image-preview-img" src="" alt="Completion photo proof" class="preview-img-element hidden" style="display: none;">
+                  <div class="preview-overlay-actions" style="margin-top: 10px; display: flex; justify-content: flex-end;">
+                    <button type="button" id="btn-remove-image" class="btn btn-secondary btn-sm">Clear All Photos</button>
                   </div>
                 </div>
               </div>
@@ -1267,6 +1274,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-  <script src="app.js?v=3.5"></script>
+  <script src="app.js?v=3.8"></script>
 </body>
 </html>
