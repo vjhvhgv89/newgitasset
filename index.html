@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3.8">
+  <link rel="stylesheet" href="style.css?v=3.9">
 </head>
 <body>
   
@@ -473,11 +473,45 @@
         <!-- Hidden Card Grid (retained for element reference compatibility) -->
         <div id="task-grid" class="task-grid-layout hidden" aria-hidden="true" style="display: none;"></div>
 
+        <!-- Bulk Actions Toolbar (Admin Only, visible when tasks are selected) -->
+        <div id="bulk-actions-toolbar" class="bulk-actions-toolbar hidden">
+          <div class="bulk-toolbar-left">
+            <span class="bulk-selected-badge">
+              <strong id="bulk-selected-count">0</strong> tasks selected
+            </span>
+            <button type="button" id="btn-bulk-clear-selection" class="btn btn-ghost btn-xs">Deselect All</button>
+          </div>
+          <div class="bulk-toolbar-actions">
+            <div class="bulk-action-group">
+              <label for="bulk-status-select" class="bulk-action-label">Change Status:</label>
+              <select id="bulk-status-select" class="input-select bulk-select">
+                <option value="" disabled selected>Choose status...</option>
+                <option value="auto">Auto (Calculate by Due Date)</option>
+                <option value="Completed">Mark as Completed</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Under Review">Under Review</option>
+              </select>
+              <button type="button" id="btn-bulk-apply-status" class="btn btn-primary btn-sm">Apply Status</button>
+            </div>
+            <div class="bulk-divider"></div>
+            <button type="button" id="btn-bulk-delete" class="btn btn-danger btn-sm">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Delete Selected</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Table View Mode (Default Primary View) -->
         <div id="task-table-wrapper" class="task-table-wrapper">
           <table class="task-table">
             <thead>
-              <tr>
+              <tr id="task-table-header-row">
+                <th id="th-select-all" class="th-checkbox" style="width: 40px; text-align: center; display: none;">
+                  <input type="checkbox" id="select-all-tasks" class="task-checkbox" title="Select all visible tasks">
+                </th>
                 <th>Status</th>
                 <th>Asset Name & ID</th>
                 <th>Category</th>
@@ -1274,6 +1308,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-  <script src="app.js?v=3.8"></script>
+  <script src="app.js?v=3.9"></script>
 </body>
 </html>

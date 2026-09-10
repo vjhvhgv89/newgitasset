@@ -4053,3 +4053,103 @@ button {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.2px;
 }
+
+/* ==========================================================================
+   Bulk Actions Toolbar (Admin Only)
+   ========================================================================== */
+.bulk-actions-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--bg-surface);
+  border: 1px solid #2563EB;
+  border-radius: var(--radius-md);
+  padding: 10px 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+  animation: bulkSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bulkSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bulk-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bulk-selected-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1D4ED8;
+  background: rgba(37, 99, 235, 0.1);
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bulk-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-action-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.bulk-select {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  min-width: 175px;
+  background: var(--bg-surface);
+}
+
+.bulk-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-color);
+}
+
+.th-checkbox, .td-checkbox {
+  width: 40px !important;
+  max-width: 40px !important;
+  text-align: center !important;
+  padding: 8px 4px !important;
+}
+
+.task-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.task-table tbody tr.row-selected {
+  background-color: rgba(37, 99, 235, 0.06) !important;
+}

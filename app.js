@@ -190,7 +190,10 @@
     editCommentImageData: null,
 
     // Recycle Bin Active Tab
-    recycleBinTab: 'tasks'
+    recycleBinTab: 'tasks',
+
+    // Bulk Actions Selection State
+    selectedTaskIds: new Set()
   };
 
   // Helper: Format Date
@@ -753,6 +756,16 @@
     taskGrid: document.getElementById('task-grid'),
     taskTableWrapper: document.getElementById('task-table-wrapper'),
     taskTableBody: document.getElementById('task-table-body'),
+
+    // Bulk Actions Toolbar (Admin Only)
+    bulkActionsToolbar: document.getElementById('bulk-actions-toolbar'),
+    bulkSelectedCount: document.getElementById('bulk-selected-count'),
+    btnBulkClearSelection: document.getElementById('btn-bulk-clear-selection'),
+    bulkStatusSelect: document.getElementById('bulk-status-select'),
+    btnBulkApplyStatus: document.getElementById('btn-bulk-apply-status'),
+    btnBulkDelete: document.getElementById('btn-bulk-delete'),
+    selectAllTasks: document.getElementById('select-all-tasks'),
+    thSelectAll: document.getElementById('th-select-all'),
     taskCalendarWrapper: document.getElementById('task-calendar-wrapper'),
     calendarMonthTitle: document.getElementById('calendar-month-title'),
     btnCalendarPrev: document.getElementById('btn-calendar-prev'),
@@ -2019,8 +2032,13 @@
       thNextCycle.textContent = 'Next Cycle Date';
     }
 
+    if (el.thSelectAll) {
+      el.thSelectAll.style.display = isAdmin() ? 'table-cell' : 'none';
+    }
+
     if (tasks.length === 0) {
       el.taskTableBody.innerHTML = '';
+      updateBulkToolbar(tasks);
       return;
     }
 
@@ -2076,8 +2094,14 @@
         conditionCellHtml = `<span class="condition-tag ${condClass}">${escapeHTML(task.condition)}</span>`;
       }
 
+      const isTaskSelected = Boolean(state.selectedTaskIds && state.selectedTaskIds.has(task.id));
+      const checkboxTd = isAdmin()
+        ? `<td class="td-checkbox"><input type="checkbox" class="task-checkbox task-row-checkbox" data-task-id="${task.id}" ${isTaskSelected ? 'checked' : ''} onchange="window.assetApp.toggleTaskSelection('${task.id}', this.checked)"></td>`
+        : '';
+
       return `
-        <tr draggable="true" data-task-id="${task.id}">
+        <tr draggable="true" data-task-id="${task.id}" class="${isTaskSelected ? 'row-selected' : ''}">
+          ${checkboxTd}
           <td>
             <span class="status-chip ${meta.className}">
               <span class="status-dot ${meta.dotClass}"></span>
@@ -2128,6 +2152,193 @@
         </tr>
       `;
     }).join('');
+
+    updateBulkToolbar(tasks);
+  }
+
+  // =========================================================================
+  // Bulk Actions Engine (Admin Only)
+  // =========================================================================
+
+  function updateBulkToolbar(visibleTasks = null) {
+    if (!el.bulkActionsToolbar) return;
+
+    if (!isAdmin()) {
+      if (state.selectedTaskIds) state.selectedTaskIds.clear();
+      el.bulkActionsToolbar.classList.add('hidden');
+      if (el.selectAllTasks) {
+        el.selectAllTasks.checked = false;
+        el.selectAllTasks.indeterminate = false;
+      }
+      return;
+    }
+
+    const tasks = visibleTasks || getFilteredTasks();
+    const visibleIds = tasks.map(t => t.id);
+    const selectedVisible = visibleIds.filter(id => state.selectedTaskIds && state.selectedTaskIds.has(id));
+
+    if (el.selectAllTasks) {
+      el.selectAllTasks.checked = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+      el.selectAllTasks.indeterminate = selectedVisible.length > 0 && selectedVisible.length < visibleIds.length;
+    }
+
+    if (selectedVisible.length > 0) {
+      el.bulkActionsToolbar.classList.remove('hidden');
+      if (el.bulkSelectedCount) {
+        el.bulkSelectedCount.textContent = selectedVisible.length;
+      }
+    } else {
+      el.bulkActionsToolbar.classList.add('hidden');
+    }
+  }
+
+  function toggleTaskSelection(taskId, isChecked) {
+    if (!state.selectedTaskIds) state.selectedTaskIds = new Set();
+    if (isChecked) {
+      state.selectedTaskIds.add(taskId);
+    } else {
+      state.selectedTaskIds.delete(taskId);
+    }
+
+    const row = document.querySelector(`tr[data-task-id="${taskId}"]`);
+    if (row) {
+      if (isChecked) row.classList.add('row-selected');
+      else row.classList.remove('row-selected');
+    }
+
+    updateBulkToolbar(getFilteredTasks());
+  }
+
+  function toggleSelectAll(isChecked) {
+    if (!state.selectedTaskIds) state.selectedTaskIds = new Set();
+    const visibleTasks = getFilteredTasks();
+
+    visibleTasks.forEach(task => {
+      if (isChecked) {
+        state.selectedTaskIds.add(task.id);
+      } else {
+        state.selectedTaskIds.delete(task.id);
+      }
+    });
+
+    document.querySelectorAll('.task-row-checkbox').forEach(cb => {
+      cb.checked = isChecked;
+      const row = cb.closest('tr');
+      if (row) {
+        if (isChecked) row.classList.add('row-selected');
+        else row.classList.remove('row-selected');
+      }
+    });
+
+    updateBulkToolbar(visibleTasks);
+  }
+
+  function clearSelection() {
+    if (state.selectedTaskIds) state.selectedTaskIds.clear();
+    document.querySelectorAll('.task-row-checkbox').forEach(cb => {
+      cb.checked = false;
+      const row = cb.closest('tr');
+      if (row) row.classList.remove('row-selected');
+    });
+    if (el.selectAllTasks) {
+      el.selectAllTasks.checked = false;
+      el.selectAllTasks.indeterminate = false;
+    }
+    if (el.bulkActionsToolbar) el.bulkActionsToolbar.classList.add('hidden');
+  }
+
+  function applyBulkStatus() {
+    if (!isAdmin()) return;
+    const newStatus = el.bulkStatusSelect ? el.bulkStatusSelect.value : '';
+    if (!newStatus) {
+      alert('Please select a status from the dropdown to apply.');
+      if (el.bulkStatusSelect) el.bulkStatusSelect.focus();
+      return;
+    }
+
+    const visibleTasks = getFilteredTasks();
+    const selectedTasks = visibleTasks.filter(t => state.selectedTaskIds && state.selectedTaskIds.has(t.id));
+
+    if (selectedTasks.length === 0) {
+      alert('No visible tasks selected. Please check at least one task row.');
+      return;
+    }
+
+    const statusLabel = newStatus === 'auto'
+      ? 'Auto (Calculate by Due Date)'
+      : (newStatus === 'Completed' ? 'Mark as Completed' : newStatus);
+
+    showConfirmModal({
+      title: `Update Status for ${selectedTasks.length} Tasks?`,
+      message: `Are you sure you want to change the status of <strong>${selectedTasks.length} selected task(s)</strong> to <strong>${escapeHTML(statusLabel)}</strong>?`,
+      iconType: 'primary',
+      okText: 'Apply Status',
+      okClass: 'btn-primary',
+      onConfirm: () => {
+        selectedTasks.forEach(task => {
+          if (newStatus === 'Completed') {
+            task.status = 'Completed';
+            task.completedAt = task.completedAt || TODAY_STR;
+          } else if (newStatus === 'auto') {
+            task.completedAt = null;
+            task.status = calculateTaskStatus(task);
+          } else {
+            task.status = newStatus;
+          }
+          syncTaskToCloud(task);
+        });
+
+        saveState();
+        clearSelection();
+        render();
+        showToast(`✓ Successfully updated status for ${selectedTasks.length} task(s).`);
+        if (el.bulkStatusSelect) el.bulkStatusSelect.value = '';
+      }
+    });
+  }
+
+  function applyBulkDelete() {
+    if (!isAdmin()) return;
+    const visibleTasks = getFilteredTasks();
+    const selectedTasks = visibleTasks.filter(t => state.selectedTaskIds && state.selectedTaskIds.has(t.id));
+
+    if (selectedTasks.length === 0) {
+      alert('No visible tasks selected to delete.');
+      return;
+    }
+
+    showConfirmModal({
+      title: `Move ${selectedTasks.length} Tasks to Recycle Bin?`,
+      message: `Are you sure you want to move <strong>${selectedTasks.length} selected task(s)</strong> to the Recycle Bin?<br><br><small style="color: var(--text-muted);">These tasks will be removed from active lists and store accounts. You can restore them at any time from the Recycle Bin.</small>`,
+      iconType: 'danger',
+      okText: 'Move to Recycle Bin',
+      okClass: 'btn-danger',
+      onConfirm: () => {
+        const nowIso = new Date().toISOString();
+        const userLabel = getCurrentUserLabel();
+
+        selectedTasks.forEach(task => {
+          task.isDeleted = true;
+          task.deletedAt = nowIso;
+          task.deletedBy = userLabel;
+
+          if (state.activeDrawerTaskId === task.id) {
+            closeCommentsDrawer();
+          }
+
+          syncTaskToCloud(task);
+        });
+
+        saveState();
+        clearSelection();
+        render();
+        if (el.recycleBinModal && el.recycleBinModal.classList.contains('open')) {
+          renderRecycleBinModal();
+        }
+        showToast(`✓ Successfully moved ${selectedTasks.length} task(s) to Recycle Bin.`);
+      }
+    });
+  }
   }
 
   // =========================================================================
@@ -2495,6 +2706,7 @@
 
   // Logout handler
   function logout() {
+    clearSelection();
     state.auth = {
       isAuthenticated: false,
       role: 'admin',
@@ -5160,6 +5372,22 @@
       });
     }
 
+    // Bulk Actions Toolbar Listeners (Admin Only)
+    if (el.selectAllTasks) {
+      el.selectAllTasks.addEventListener('change', (e) => {
+        toggleSelectAll(e.target.checked);
+      });
+    }
+    if (el.btnBulkClearSelection) {
+      el.btnBulkClearSelection.addEventListener('click', clearSelection);
+    }
+    if (el.btnBulkApplyStatus) {
+      el.btnBulkApplyStatus.addEventListener('click', applyBulkStatus);
+    }
+    if (el.btnBulkDelete) {
+      el.btnBulkDelete.addEventListener('click', applyBulkDelete);
+    }
+
     if (el.viewToggleCalendar) {
       el.viewToggleCalendar.addEventListener('click', () => {
         state.viewMode = 'calendar';
@@ -5597,7 +5825,12 @@
     openExportModal: openExportModal,
     closeExportModal: closeExportModal,
     exportToCSV: exportToCSV,
-    generatePDFReport: generatePDFReport
+    generatePDFReport: generatePDFReport,
+    toggleTaskSelection: toggleTaskSelection,
+    toggleSelectAll: toggleSelectAll,
+    clearSelection: clearSelection,
+    applyBulkStatus: applyBulkStatus,
+    applyBulkDelete: applyBulkDelete
   };
 
   if (document.readyState === 'loading') {
